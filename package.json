@@ -1,0 +1,25 @@
+{
+  "name": "weave-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Weave: an MCP-powered assistant that answers across your apps, cites its sources and asks before it changes anything. wHACKiest 2026 prototype.",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "offline": "WEAVE_MODE=offline node --env-file-if-exists=.env src/server.js",
+    "smoke": "node scripts/smoke.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@fontsource-variable/newsreader": "^5.3.0",
+    "@fontsource-variable/schibsted-grotesk": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0"
+  }
+}

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Weave</title>
+  <meta name="description" content="Weave answers one question across your apps, shows its sources, and asks before it changes anything." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath d='M64 128 176 392 300 128' fill='none' stroke='%232D5BE3' stroke-width='60' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M212 128 336 392 448 128' fill='none' stroke='%2312A487' stroke-width='60' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="preload" href="/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/newsreader-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <a class="skip" href="#q">Skip to the question box</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+        <defs>
+          <mask id="weave-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+            <rect width="512" height="512" fill="#fff" />
+            <path d="M212,128 L336,392" stroke="#000" stroke-width="92" />
+          </mask>
+        </defs>
+        <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="58">
+          <path d="M64,128 L176,392 L300,128" stroke="var(--blue)" mask="url(#weave-gap)" />
+          <path d="M212,128 L336,392 L448,128" stroke="var(--mark-teal)" />
+        </g>
+      </svg>
+      <span class="wordmark">Weave</span>
+      <span class="divider" aria-hidden="true"></span>
+      <span class="today" id="today"></span>
+    </div>
+    <div class="topbar-actions">
+      <div class="planner" role="group" aria-label="Planner">
+        <span class="planner-label">Planner</span>
+        <div class="segmented" id="planner"></div>
+      </div>
+      <button class="btn btn-ghost" id="reset" type="button" title="Restart the MCP servers with fresh sample data">
+        <span class="i" data-icon="reset"></span><span>Reset demo</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="rail" aria-label="Apps">
+      <div class="rail-section">
+        <h2 class="label">Connected apps</h2>
+        <ul class="apps" id="apps"></ul>
+      </div>
+      <div class="rail-section">
+        <h2 class="label">Planned</h2>
+        <ul class="apps planned" id="planned"></ul>
+      </div>
+      <div class="rail-foot" id="railFoot"></div>
+    </aside>
+
+    <main class="main" id="main">
+      <div class="main-inner">
+        <section class="intro" id="intro">
+          <h1 class="greeting" id="greeting">Hello.</h1>
+          <p class="subline" id="subline"></p>
+        </section>
+
+        <form class="composer" id="composer" autocomplete="off">
+          <label class="sr-only" for="q">Ask Weave</label>
+          <textarea id="q" rows="2" maxlength="600" placeholder="Ask about your day, your plans or your spending…"></textarea>
+          <div class="composer-foot">
+            <span class="composer-meta" id="composerMeta"></span>
+            <span class="hint"><kbd>⏎</kbd> to ask · <kbd>⇧⏎</kbd> new line</span>
+            <button class="btn btn-primary" id="askBtn" type="submit"><span>Ask</span><span class="i" data-icon="enter"></span></button>
+          </div>
+        </form>
+
+        <section class="suggestions" id="suggestions" aria-label="Example questions"></section>
+        <section class="result" id="result" aria-live="polite"></section>
+        <section class="principles" id="principles" aria-label="How Weave works">
+          <h2 class="label">How Weave works</h2>
+          <ol>
+            <li><span class="num">1</span><div><strong>Reads only what a question needs,</strong> through each app's MCP server.</div></li>
+            <li><span class="num">2</span><div><strong>Cites the records behind every point,</strong> so you can check them.</div></li>
+            <li><span class="num">3</span><div><strong>Drafts changes and waits for your OK</strong> before it touches anything.</div></li>
+          </ol>
+        </section>
+      </div>
+    </main>
+
+    <aside class="panel" aria-label="Sources and activity">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="tab-sources" aria-controls="sources" aria-selected="true" data-tab="sources">Sources <span class="count" id="sourcesCount"></span></button>
+        <button class="tab" role="tab" id="tab-activity" aria-controls="activity" aria-selected="false" data-tab="activity">MCP activity <span class="count" id="activityCount"></span></button>
+      </div>
+      <div class="panel-body" id="sources" role="tabpanel" aria-labelledby="tab-sources"></div>
+      <div class="panel-body" id="activity" role="tabpanel" aria-labelledby="tab-activity" hidden></div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
