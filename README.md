@@ -15,9 +15,10 @@ Ask ──▶ Weave app ──▶ planner (Claude, or the offline script)
 
 ## Run it
 
-Needs Node 22 or later.
+Needs Node 22 or later. The Node app lives in `backend/`; `frontend/` is a plain static site with no build step and no `package.json` of its own.
 
 ```bash
+cd backend
 npm install
 npm start
 ```
@@ -27,12 +28,14 @@ Open <http://localhost:4321>.
 - **Offline planner** (default when no key is found): a fixed script for the two demo questions. It makes the same real MCP calls and follows the same rules, but the reasoning is hand-written, so it only understands those two questions. Use it if the venue Wi-Fi is unreliable.
 - **Claude planner**: set a key, restart, and pick *Claude* in the top bar. Claude chooses which MCP tools to call and writes the cited answer.
 
+Still in `backend/`:
+
 ```bash
 cp .env.example .env               # then put your key in .env (or: ant auth login)
 npm start
 ```
 
-Check everything still works end to end (offline, about 5 seconds):
+Check everything still works end to end from `backend/` (offline, about 5 seconds):
 
 ```bash
 npm run smoke
@@ -44,7 +47,7 @@ npm run smoke
 |---|---|
 | MCP protocol: client, `tools/list`, `tools/call`, tool annotations | **Real**, using the official `@modelcontextprotocol/sdk` over stdio |
 | Calendar, Notes, Tasks and Money servers | **Real MCP servers, sample data.** The data is generated relative to today so the demo works on any day. Nothing connects to a real account. |
-| Money | Reads `data/statement.csv` if you add one (format in `data/statement.example.csv`); otherwise a sample statement. Never connects to a bank or UPI app. |
+| Money | Reads `backend/data/statement.csv` if you add one (format in `backend/data/statement.example.csv`); otherwise a sample statement. Never connects to a bank or UPI app. |
 | Approval gate | **Real.** Any tool not marked `readOnlyHint: true` is held as a draft; it runs only after you approve, then Weave reads the record back before saying "Done". |
 | Claude planner | Built on the Anthropic SDK's tool runner with `claude-opus-5-5`. **Not tested against the live API on this machine** (no key was available). The offline path is fully tested. |
 | Email, fitness apps, travel, learning, home | **Planned.** Shown as planned in the app and not connected. |
@@ -64,13 +67,13 @@ npm run smoke
 
 | Path | What it does |
 |---|---|
-| `mcp-servers/*.js` | Four MCP servers (`McpServer` + stdio). Tools carry MCP annotations: reads are `readOnlyHint: true`; `create_task` and `create_event` are not. |
-| `src/hub.js` | Weave's MCP client. Spawns each server, discovers tools, calls them, and logs every message for the activity panel. |
-| `src/run.js` | One question = one run. Reads register citable sources, writes become drafts, and the answer may only cite records that were actually read. |
-| `src/agent-claude.js` | Claude planner: each MCP tool becomes a tool for the SDK's tool runner; write tools only create drafts. The final answer comes back through a strict `present_answer` tool. |
-| `src/agent-offline.js` | Offline planner for the two demo questions. |
-| `src/server.js` | Local HTTP server (127.0.0.1 only): the UI, a streaming `/api/ask`, approve/dismiss, app switches, reset. |
-| `web/` | The interface. Plain HTML, CSS and JS modules; no build step. |
+| `backend/mcp-servers/*.js` | Four MCP servers (`McpServer` + stdio). Tools carry MCP annotations: reads are `readOnlyHint: true`; `create_task` and `create_event` are not. |
+| `backend/src/hub.js` | Weave's MCP client. Spawns each server, discovers tools, calls them, and logs every message for the activity panel. |
+| `backend/src/run.js` | One question = one run. Reads register citable sources, writes become drafts, and the answer may only cite records that were actually read. |
+| `backend/src/agent-claude.js` | Claude planner: each MCP tool becomes a tool for the SDK's tool runner; write tools only create drafts. The final answer comes back through a strict `present_answer` tool. |
+| `backend/src/agent-offline.js` | Offline planner for the two demo questions. |
+| `backend/src/server.js` | Local HTTP server (127.0.0.1 only): serves `frontend/`, a streaming `/api/ask`, approve/dismiss, app switches, reset. |
+| `frontend/` | The interface. Plain HTML, CSS and JS modules; no build step, no dependencies to install. |
 
 ### Configuration
 
@@ -81,15 +84,15 @@ npm run smoke
 | `WEAVE_MODEL` | `claude-opus-5-5` | Model for the Claude planner. |
 | `WEAVE_EFFORT` | `medium` | `low`, `medium`, `high`, `xhigh` or `max`. |
 | `WEAVE_TODAY` | today | Pin "today" (YYYY-MM-DD) for a repeatable demo. |
-| `WEAVE_STATEMENT_CSV` | `data/statement.csv` | Statement file for the Money server. |
+| `WEAVE_STATEMENT_CSV` | `data/statement.csv` (relative to `backend/`) | Statement file for the Money server. |
 | `PORT` | `4321` | Server port. |
 
-Claude requests use server-side refusal fallbacks (`fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta), so if the model declines, the API retries on a fallback model. Remove those two fields in `src/agent-claude.js` to turn this off.
+Claude requests use server-side refusal fallbacks (`fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta), so if the model declines, the API retries on a fallback model. Remove those two fields in `backend/src/agent-claude.js` to turn this off.
 
 ### Adding a real app
 
-Any MCP server can replace a sample one: add it to `SERVER_DEFS` in `src/hub.js` with the command that starts it. Weave discovers its tools automatically. A tool that isn't marked read-only always goes through the approval gate. Real accounts need that server's own sign-in (usually OAuth), which this prototype doesn't include.
+Any MCP server can replace a sample one: add it to `SERVER_DEFS` in `backend/src/hub.js` with the command that starts it. Weave discovers its tools automatically. A tool that isn't marked read-only always goes through the approval gate. Real accounts need that server's own sign-in (usually OAuth), which this prototype doesn't include.
 
 ## Credits
 
-Fonts: Newsreader, Schibsted Grotesk and IBM Plex Mono (SIL Open Font License, see `web/fonts`). Icons: Lucide (ISC License).
+Fonts: Newsreader, Schibsted Grotesk and IBM Plex Mono (SIL Open Font License, see `frontend/fonts`). Icons: Lucide (ISC License).

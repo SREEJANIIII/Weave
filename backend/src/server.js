@@ -10,7 +10,7 @@ import { runClaude, explainError, hasCredentials, MODEL, EFFORT } from './agent-
 import { now, isoDate, fmtLongDate } from '../lib/dates.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const webRoot = path.join(root, 'web');
+const webRoot = path.join(root, '..', 'frontend');
 const PORT = Number(process.env.PORT) || 4321;
 const HOST = '127.0.0.1';
 
