@@ -30,24 +30,37 @@ export class Hub {
     this.servers = new Map();
     this.activity = [];
     this.seq = 0;
+    this.started = false;
+    this.startPromise = null;
+    this.restartPromise = null;
   }
 
   async start() {
-    await Promise.all(SERVER_DEFS.map((def) => this.#connect(def)));
-    const wishlist = this.servers.get('wishlist');
-    if (wishlist?.status === 'error') throw new Error(`Wishlist & sizes could not start: ${wishlist.error}`);
+    if (this.started) return;
+    if (this.startPromise) return this.startPromise;
+    this.startPromise = (async () => {
+      await Promise.all(SERVER_DEFS.map((def) => this.#connect(def)));
+      this.started = true;
+    })().finally(() => { this.startPromise = null; });
+    return this.startPromise;
   }
 
   async restart() {
-    await this.stop();
-    const enabled = new Map([...this.servers].map(([id, s]) => [id, s.enabled]));
-    this.servers.clear();
-    this.activity = [];
-    await Promise.all(SERVER_DEFS.map((def) => this.#connect(def, enabled.get(def.id) ?? true)));
+    if (this.restartPromise) return this.restartPromise;
+    this.restartPromise = (async () => {
+      const enabled = new Map([...this.servers].map(([id, s]) => [id, s.enabled]));
+      await this.stop();
+      this.activity = [];
+      await Promise.all(SERVER_DEFS.map((def) => this.#connect(def, enabled.get(def.id) ?? true)));
+      this.started = true;
+    })().finally(() => { this.restartPromise = null; });
+    return this.restartPromise;
   }
 
   async stop() {
     await Promise.allSettled([...this.servers.values()].map((s) => s.client?.close()));
+    this.servers.clear();
+    this.started = false;
   }
 
   async #connect(def, enabled = true) {
@@ -56,8 +69,24 @@ export class Hub {
     const env = Object.fromEntries(
       ['PATH', 'HOME', 'TZ', 'WEAVE_TODAY', 'WEAVE_STATEMENT_CSV', 'MONGODB_URI', 'MONGODB_DB_NAME', 'WEAVE_PROFILE_ENCRYPTION_KEY', 'APPLIANCE_REMINDER_WINDOWS', 'APPLIANCE_EMI_MONTHS_AHEAD', 'WEAVE_UPLOAD_DIR'].filter((k) => process.env[k]).map((k) => [k, process.env[k]]),
     );
+    let stderr = '';
     try {
-      const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(this.root, def.script)], cwd: this.root, env, stderr: 'inherit' });
+      const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(this.root, def.script)], cwd: this.root, env, stderr: 'pipe' });
+      transport.stderr?.on('data', (chunk) => {
+        stderr = `${stderr}${String(chunk)}`.slice(-4000);
+      });
+      transport.onerror = (error) => {
+        if (entry.status === 'connected') {
+          entry.status = 'error';
+          entry.error = `MCP transport error: ${error.message}`;
+        }
+      };
+      transport.onclose = () => {
+        if (entry.status === 'connected') {
+          entry.status = 'error';
+          entry.error = stderr.trim() ? `MCP server disconnected; server stderr: ${stderr.trim()}` : 'MCP server disconnected after initialization.';
+        }
+      };
       const client = new Client({ name: 'weave', version: '0.1.0' });
       const t0 = performance.now();
       await client.connect(transport);
@@ -65,8 +94,10 @@ export class Hub {
       Object.assign(entry, { client, tools, status: 'connected' });
       this.log({ server: def.id, method: 'tools/list', ms: performance.now() - t0, summary: `${tools.length} tools` });
     } catch (err) {
-      Object.assign(entry, { status: 'error', error: err.message });
-      this.log({ server: def.id, method: 'connect', ms: 0, summary: `failed: ${err.message}`, isError: true });
+      const detail = stderr.trim();
+      const error = detail ? `${err.message}; server stderr: ${detail}` : err.message;
+      Object.assign(entry, { status: 'error', error });
+      this.log({ server: def.id, method: 'connect', ms: 0, summary: `failed: ${error}`.slice(0, 500), isError: true });
     }
   }
 

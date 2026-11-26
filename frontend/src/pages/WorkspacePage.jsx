@@ -72,14 +72,17 @@ function Welcome({ services, onConnectAll, onChoose, onLater }) {
 export function WorkspacePage({ routeView = null }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const view = location.pathname.startsWith('/app/wishlist')
+  const view = routeView ?? (location.pathname.startsWith('/app/wishlist')
     ? 'wishlist'
     : location.pathname.startsWith('/app/size-profile')
       ? 'size-profile'
       : location.pathname.startsWith('/app/connections')
         ? 'connections'
-        : 'ask';
+        : location.pathname.startsWith('/app/appliances')
+          ? 'appliances'
+          : 'home');
 
   usePageMeta({
     page: 'app',
@@ -93,9 +96,7 @@ export function WorkspacePage({ routeView = null }) {
             : 'Weave prototype: ask across your apps',
     description:
       'Ask one question across your connected apps, manage your Smart Wishlist & Size Intelligence, and approve changes before anything runs.',
-  const [searchParams, setSearchParams] = useSearchParams();
-  const PAGES = { '/app/wishlist': 'wishlist', '/app/size-profile': 'size-profile', '/app/appliances': 'appliances', '/app/saved': 'saved', '/app/connections': 'connections' };
-  const view = routeView ?? (Object.entries(PAGES).find(([path]) => location.pathname.startsWith(path))?.[1] ?? 'home');
+  });
 
   usePageMeta({
     page: ['wishlist', 'size-profile', 'appliances'].includes(view) ? 'app' : 'dashboard',
@@ -625,39 +626,6 @@ export function WorkspacePage({ routeView = null }) {
           />
         </main>
       ) : (
-        <div className="workspace">
-          <main className="main" id="main">
-            <section className="ask" aria-labelledby="greeting">
-              <h1 className="greeting" id="greeting">{greeting}</h1>
-              <p className="ask-sub">{askSub}</p>
-              <form
-                className="composer"
-                autoComplete="off"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  ask(questionText);
-                }}
-              >
-                <label className="visually-hidden" htmlFor="q">Your question</label>
-                <textarea
-                  ref={textareaRef}
-                  id="q"
-                  name="q"
-                  rows={2}
-                  maxLength={600}
-                  placeholder="Ask about your day, your wishlist outfits, sizing or spending"
-                  value={questionText}
-                  disabled={busy}
-                  onChange={(e) => {
-                    setQuestionText(e.target.value);
-                    autosize();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      ask(questionText);
-                    }
-                  }}
       <div className="shell-main">
         <header className="main-top">
           <button type="button" className="side-icon main-toggle" onClick={toggleSidebar} aria-label="Open sidebar">
@@ -760,21 +728,6 @@ export function WorkspacePage({ routeView = null }) {
 
               {conn.firstRun && <Welcome services={conn.services} onConnectAll={connectAll} onChoose={() => openPanel('connections')} onLater={notNow} />}
 
-          <InspectorPanel
-            tab={tab}
-            onSelectTab={selectTab}
-            status={status}
-            offline={offline}
-            busy={busy}
-            run={run}
-            activity={activity}
-            litN={litN}
-            sourceRefs={sourceRefs}
-            onToggleApp={handleToggleApp}
-            onOpenConnections={(appId) => navigate(`/app/connections?app=${encodeURIComponent(appId)}`)}
-          />
-        </div>
-      )}
               <TodayPanel
                 glance={glance}
                 loading={!conn.synced || glanceLoading}
@@ -793,6 +746,7 @@ export function WorkspacePage({ routeView = null }) {
 
         {dockComposer && <div className="dock">{composer(true)}</div>}
       </div>
+      )}
 
       <UploadSheet
         job={uploadJob}

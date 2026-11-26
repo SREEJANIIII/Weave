@@ -1,3 +1,5 @@
+import { APP_REGISTRY } from './formatters';
+
 // Plain-language copy for the services Weave can connect to. The list of services itself always
 // comes from the server (/api/status); this file only says, in everyday words, what each one is.
 
@@ -31,7 +33,7 @@ export const SERVICE_COPY = {
     helps: 'Spending and purchases',
   },
   wishlist: {
-    name: 'Wishlist',
+    name: 'Wishlist & sizes',
     icon: 'i-heart',
     sees: 'Products you’ve saved, and size suggestions. Your measurements are only used for size questions.',
     changes: 'Saves or changes wishlist items only after you say yes.',
@@ -89,7 +91,15 @@ export function stepText(step) {
 
 /** Services the dashboard can show: what the server reports, merged with plain copy and the person's consent. */
 export function describeServices(status, consent) {
-  return (status?.apps ?? []).map((a) => {
+  const received = new Map((status?.apps ?? []).map((app) => [app.id, app]));
+  return APP_REGISTRY.map((definition) => {
+    const a = received.get(definition.id) ?? {
+      ...definition,
+      status: 'missing',
+      enabled: false,
+      error: 'No MCP status received.',
+      tools: [],
+    };
     const copy = SERVICE_COPY[a.id] ?? { name: a.name, icon: 'i-plug', sees: a.blurb, changes: 'Changes things only after you say yes.', helps: a.blurb };
     const canChange = a.tools.some((t) => !t.readOnly);
     const reachable = a.status === 'connected';
