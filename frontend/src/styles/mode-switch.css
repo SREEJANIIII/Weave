@@ -16,7 +16,7 @@
 .mode-switch.is-on .mode-switch-track { background: var(--color-ink); }
 .mode-switch.is-on .mode-switch-thumb { transform: translateX(16px); }
 /* Keep the last footer links clear of the docked switch. */
-body:has(.mode-switch) .footer { padding-bottom: calc(var(--space-3xl) + 48px); }
+html body:has(.mode-switch) .footer { padding-bottom: calc(var(--space-3xl) + 48px); }
 .mode-short { display: none; }
 @media (max-width: 40rem) {
   .mode-switch { right: var(--space-md); bottom: var(--space-md); min-height: 44px; gap: var(--space-xs); padding-left: var(--space-sm); font-size: var(--text-xs); }

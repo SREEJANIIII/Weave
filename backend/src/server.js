@@ -10,7 +10,9 @@ import { runClaude, explainError, hasCredentials, MODEL, EFFORT } from './agent-
 import { now, isoDate, fmtLongDate } from '../lib/dates.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const webRoot = path.join(root, '..', 'frontend');
+const frontendRoot = path.join(root, '..', 'frontend');
+const distRoot = path.join(frontendRoot, 'dist');
+const webRoot = fs.existsSync(path.join(distRoot, 'index.html')) ? distRoot : frontendRoot;
 const PORT = Number(process.env.PORT) || 4321;
 const HOST = '127.0.0.1';
 
@@ -23,7 +25,7 @@ const state = {
 // Fields a person may edit on a draft before approving it.
 const EDITABLE = { create_task: ['title', 'due'], create_event: ['title', 'date', 'start', 'end'] };
 
-const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -108,19 +110,36 @@ async function approve(id, changes = {}) {
 function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const rel = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);
-  const file = path.normalize(path.join(webRoot, rel));
-  if (!file.startsWith(webRoot + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+  let file = path.normalize(path.join(webRoot, rel));
+  if (!file.startsWith(webRoot + path.sep) && file !== webRoot) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     return res.end('Not found');
   }
+  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    const ext = path.extname(rel);
+    const spaFallback = path.join(webRoot, 'index.html');
+    if ((!ext || ext === '.html') && fs.existsSync(spaFallback)) {
+      file = spaFallback;
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      return res.end('Not found');
+    }
+  }
   const ext = path.extname(file);
-  res.writeHead(200, { 'Content-Type': TYPES[ext] ?? 'application/octet-stream', 'Cache-Control': ext === '.woff2' ? 'public, max-age=31536000, immutable' : 'no-cache' });
+  const immutable = ext === '.woff2' || file.includes(`${path.sep}assets${path.sep}`);
+  res.writeHead(200, { 'Content-Type': TYPES[ext] ?? 'application/octet-stream', 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' });
   fs.createReadStream(file).pipe(res);
 }
 
 function sameOrigin(req) {
   const origin = req.headers.origin;
-  return !origin || origin === `http://localhost:${PORT}` || origin === `http://127.0.0.1:${PORT}`;
+  return (
+    !origin ||
+    origin === `http://localhost:${PORT}` ||
+    origin === `http://127.0.0.1:${PORT}` ||
+    origin === 'http://localhost:5173' ||
+    origin === 'http://127.0.0.1:5173'
+  );
 }
 
 const server = http.createServer(async (req, res) => {

@@ -17,7 +17,11 @@ Ask ──▶ Weave app ──▶ planner (Claude, or the offline script)
 
 ```
 Weave/
-├── frontend/      The UI: plain HTML, CSS and JS modules (no build step)
+├── frontend/      React + Vite UI (everyday page, developer mode, prototype app)
+│   ├── src/           Pages, components, hooks, and scoped stylesheets
+│   ├── public/        Fonts, favicons, manifest, and Netlify SPA redirects
+│   ├── vite.config.js Vite config with /api proxy to the backend
+│   └── package.json
 ├── backend/       Node server, planners and the four MCP servers
 │   ├── src/           HTTP server, MCP client, planners
 │   ├── mcp-servers/   Calendar, Notes, Tasks, Money
@@ -25,44 +29,39 @@ Weave/
 │   ├── data/          Optional statement CSV for the Money server
 │   ├── scripts/       Smoke test
 │   └── .env.example
-└── package.json   Shortcuts that run the backend's npm scripts
+├── scripts/       Monorepo dev runner (backend + Vite dev server)
+└── package.json   Shortcuts that build/run frontend and backend together
 ```
 
 ## Run it
 
-Needs Node 22 or later. The Node app lives in `backend/`; `frontend/` is a plain static site with no build step and no `package.json` of its own.
+Needs Node 22 or later. The UI in `frontend/` is built with React + Vite, and the Node server in `backend/` serves the built React app (`frontend/dist`) and `/api/*`.
 
 ### 1. Install
 
 ```bash
-npm install          # from the repo root; installs backend/ dependencies too
+npm install          # from the repo root; installs backend/ and frontend/ dependencies
 ```
 
-The frontend has no dependencies and no build step, so there is nothing to install for it.
-
-### 2. Start the backend (this also serves the frontend)
+### 2. Start the app (production build served by backend)
 
 From the repo root:
 
 ```bash
-npm start            # or: npm run offline  (forces the offline planner)
+npm start            # builds frontend/dist and starts backend on http://localhost:4321
 ```
 
-Or from inside `backend/`:
+Or run the frontend and backend in hot-reload dev mode (Vite on `http://127.0.0.1:5173` proxying `/api/*` to the backend on `4321`):
 
 ```bash
-cd backend
-npm install
-npm start
+npm run dev
 ```
 
-Then open <http://localhost:4321>.
-
-The backend serves the files in `frontend/` and the `/api/*` endpoints from the same address, so you don't start the frontend separately. The UI calls `/api/...` on the address it was loaded from, so opening `frontend/index.html` directly or serving it from another port won't work without a proxy to the backend.
+Then open <http://localhost:4321> (with `npm start`) or <http://127.0.0.1:5173> (with `npm run dev`).
 
 ### 3. Working on the frontend
 
-Edit anything in `frontend/` and refresh the browser. The server reads the files from disk on each request, so you don't need to restart it. Changes in `backend/` need a restart (`Ctrl+C`, then `npm start`).
+Run `npm run dev` from the repo root for instant React HMR while talking to the live MCP backend, or run `npm run build` to rebuild `frontend/dist` for `npm start`. Changes in `backend/` need a server restart.
 
 ### Planners
 
@@ -125,8 +124,8 @@ npm run smoke
 | `backend/src/run.js` | One question = one run. Reads register citable sources, writes become drafts, and the answer may only cite records that were actually read. |
 | `backend/src/agent-claude.js` | Claude planner: each MCP tool becomes a tool for the SDK's tool runner; write tools only create drafts. The final answer comes back through a strict `present_answer` tool. |
 | `backend/src/agent-offline.js` | Offline planner for the two demo questions. |
-| `backend/src/server.js` | Local HTTP server (127.0.0.1 only): serves `frontend/`, a streaming `/api/ask`, approve/dismiss, app switches, reset. |
-| `frontend/` | The interface. Plain HTML, CSS and JS modules; no build step, no dependencies to install. |
+| `backend/src/server.js` | Local HTTP server (127.0.0.1 only): serves `frontend/dist` (with SPA fallback), a streaming `/api/ask`, approve/dismiss, app switches, reset. |
+| `frontend/` | React + Vite interface: everyday landing page (`/`), developer mode (`/developers`), and prototype app (`/app`). |
 
 ### Configuration
 
