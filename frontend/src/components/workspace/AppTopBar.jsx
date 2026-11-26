@@ -61,6 +61,12 @@ export function AppTopBar({ status, busy, offline, reminderCount = 0, onSetMode,
           >
             My Size Profile
           </NavLink>
+          <NavLink
+            to="/app/appliances"
+            className={({ isActive }) => `bar-nav-link${isActive ? ' is-active' : ''}`}
+          >
+            Appliances
+          </NavLink>
         </nav>
 
         <span className="bar-date">{status?.todayLabel ?? ''}</span>

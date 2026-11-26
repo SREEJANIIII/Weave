@@ -28,7 +28,7 @@ function withSourceIds(server, value, depth = 0) {
   return copy;
 }
 
-const COUNT_KEYS = ['events', 'notes', 'tasks', 'transactions', 'slots', 'items', 'reminders'];
+const COUNT_KEYS = ['events', 'notes', 'tasks', 'transactions', 'slots', 'items', 'reminders', 'appliances', 'documents', 'deadlines'];
 function safeArgs(server, tool, args) {
   if (server !== 'wishlist' || !['get_size_profile', 'update_size_profile', 'match_product_size'].includes(tool)) return args;
   const copy = { ...args };
@@ -49,6 +49,9 @@ function describe(tool, data) {
   if (data.task) return data.task.title;
   if (data.event) return data.event.title;
   if (data.item) return data.item.product_name;
+  if (data.appliance) return data.appliance.name;
+  if (data.document) return data.document.originalName;
+  if (data.deadline) return data.deadline.title;
   if (data.deleted?.product_name) return data.deleted.product_name;
   if (data.match?.recommendation) return `Size ${data.match.recommendation}`;
   if (data.profile) return 'size profile';
@@ -147,9 +150,10 @@ export class Run {
 
   /** Validate citations, number the cited sources and send the answer to the client. */
   finish(answer) {
-    const valid = (ids) => [...new Set((ids ?? []).filter((id) => this.sources.has(id)))];
-    const sections = (answer.sections ?? [])
-      .map((s) => ({ title: s.title, items: (s.items ?? []).map((it) => ({ text: it.text, detail: it.detail ?? '', sourceIds: valid(it.source_ids ?? it.sourceIds) })) }))
+    const list = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
+    const valid = (ids) => [...new Set(list(ids).filter((id) => this.sources.has(id)))];
+    const sections = list(answer.sections)
+      .map((s) => ({ title: s.title, items: list(s.items).map((it) => ({ text: it.text, detail: it.detail ?? '', sourceIds: valid(it.source_ids ?? it.sourceIds) })) }))
       .filter((s) => s.items.length);
 
     // Number sources in the order the answer first cites them, then the drafts' sources.
@@ -164,7 +168,7 @@ export class Run {
     this.answer = {
       headline: answer.headline ?? '',
       sections,
-      caveats: (answer.caveats ?? []).filter(Boolean),
+      caveats: list(answer.caveats).filter(Boolean),
       sources,
       proposals: this.drafts,
       stats: {

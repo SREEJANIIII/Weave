@@ -7,6 +7,7 @@ import { InspectorPanel } from '../components/workspace/InspectorPanel';
 import { WishlistView } from '../components/wishlist/WishlistView';
 import { SizeProfileView } from '../components/profile/SizeProfileView';
 import { SizeIntelligenceModal } from '../components/wishlist/SizeIntelligenceModal';
+import { AppliancesView } from '../components/appliances/AppliancesView';
 import { SHORT } from '../lib/formatters';
 import { matchOccasions } from '../lib/occasionMatcher';
 import { buildWishlistRunResponse, isWishlistQuery } from '../lib/wishlistContextQA';
@@ -21,6 +22,14 @@ const WISHLIST_PROMPTS = [
   "My friend's wedding is next month. Do I have anything saved for it?",
   'Show me the products I should revisit before my upcoming occasions.',
   'Which size should I consider for this dress?',
+];
+
+const APPLIANCE_PROMPTS = [
+  'Which warranties expire soon?',
+  'When is my next AC service?',
+  'How much EMI is due this month?',
+  'Can I still return my washing machine?',
+  'Which AMCs need renewal?',
 ];
 
 async function api(path, body) {
@@ -40,7 +49,9 @@ export function WorkspacePage() {
     ? 'wishlist'
     : location.pathname.startsWith('/app/size-profile')
       ? 'size-profile'
-      : 'ask';
+      : location.pathname.startsWith('/app/appliances')
+        ? 'appliances'
+        : 'ask';
 
   usePageMeta({
     page: 'app',
@@ -49,7 +60,9 @@ export function WorkspacePage() {
         ? 'Weave — Smart Wishlist'
         : view === 'size-profile'
           ? 'Weave — My Size Profile'
-          : 'Weave prototype: ask across your apps',
+          : view === 'appliances'
+            ? 'Weave — Appliances & Bills'
+            : 'Weave prototype: ask across your apps',
     description:
       'Ask one question across your connected apps, manage your Smart Wishlist & Size Intelligence, and approve changes before anything runs.',
   });
@@ -77,6 +90,10 @@ export function WorkspacePage() {
   );
   const calendarEnabled = useMemo(
     () => Boolean(status?.apps?.find((a) => a.id === 'calendar')?.enabled && status?.apps?.find((a) => a.id === 'calendar')?.status === 'connected'),
+    [status],
+  );
+  const appliancesEnabled = useMemo(
+    () => Boolean(status?.apps?.find((a) => a.id === 'appliances')?.enabled && status?.apps?.find((a) => a.id === 'appliances')?.status === 'connected'),
     [status],
   );
 
@@ -458,7 +475,11 @@ export function WorkspacePage() {
         onReset={handleReset}
       />
 
-      {view === 'wishlist' ? (
+      {view === 'appliances' ? (
+        <main id="main">
+          <AppliancesView enabled={appliancesEnabled} />
+        </main>
+      ) : view === 'wishlist' ? (
         <main className="wl-shell" id="main">
           <WishlistView
             wishlist={wishlist}
@@ -578,6 +599,22 @@ export function WorkspacePage() {
                     key={q}
                     type="button"
                     className="is-wishlist"
+                    disabled={busy}
+                    title={q}
+                    aria-label={`Ask: ${q}`}
+                    onClick={() => {
+                      setQuestionText(q);
+                      requestAnimationFrame(autosize);
+                      ask(q);
+                    }}
+                  >
+                    {q}
+                  </button>
+                ))}
+                {APPLIANCE_PROMPTS.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
                     disabled={busy}
                     title={q}
                     aria-label={`Ask: ${q}`}

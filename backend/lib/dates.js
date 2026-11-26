@@ -30,6 +30,13 @@ export function addDays(d, n) {
   return x;
 }
 
+/** Add whole calendar months, clamping the day to the last day of the target month. */
+export function addMonths(d, n) {
+  const first = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return new Date(first.getFullYear(), first.getMonth(), Math.min(d.getDate(), lastDay));
+}
+
 export const weekday = (d) => WEEKDAYS[d.getDay()];
 export const shortWeekday = (d) => WEEKDAYS[d.getDay()].slice(0, 3);
 

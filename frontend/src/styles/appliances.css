@@ -1,0 +1,59 @@
+/* Appliances & Bills: upload, review and dashboard surface. Uses the app's existing tokens. */
+html[data-page="app"] .ap-shell { max-width: 1180px; margin: 0 auto; padding: calc(var(--bar-height) + var(--space-lg)) var(--space-lg) var(--space-3xl); display: grid; gap: var(--space-md); }
+html[data-page="app"] .ap-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
+html[data-page="app"] .ap-header h1 { font-size: var(--app-2xl); margin: 0 0 var(--space-xs); }
+html[data-page="app"] .ap-header p { margin: 0; max-width: 60ch; color: var(--color-ink-2); }
+html[data-page="app"] .ap-card { background: var(--color-paper-2); border: 1px solid var(--color-edge); border-radius: 12px; padding: var(--space-md); }
+html[data-page="app"] .ap-card h2 { font-size: var(--app-lg); margin: 0 0 var(--space-sm); }
+html[data-page="app"] .ap-card h3 { font-size: var(--app-md); margin: var(--space-md) 0 var(--space-xs); }
+html[data-page="app"] .ap-muted { color: var(--color-ink-2); font-size: var(--app-sm); margin: var(--space-xs) 0 0; }
+html[data-page="app"] .ap-label { font-size: var(--app-sm); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 var(--space-xs); }
+html[data-page="app"] .ap-error, html[data-page="app"] .ap-notice { margin: 0; font-size: var(--app-sm); }
+html[data-page="app"] .ap-error { color: var(--color-accent-ink, var(--color-ink)); border-color: var(--color-accent); }
+html[data-page="app"] .ap-warnings { margin: var(--space-xs) 0; padding-left: 1.2rem; color: var(--color-ink-2); font-size: var(--app-sm); }
+
+html[data-page="app"] .ap-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-sm); }
+html[data-page="app"] .ap-stats .ap-card { display: flex; flex-direction: column; gap: 2px; }
+html[data-page="app"] .ap-stats strong { font-size: var(--app-2xl); line-height: 1.1; }
+html[data-page="app"] .ap-stats span { color: var(--color-ink-2); font-size: var(--app-sm); }
+
+html[data-page="app"] .ap-upload { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+html[data-page="app"] .ap-upload label, html[data-page="app"] .ap-link-select { display: flex; flex-direction: column; gap: 4px; font-size: var(--app-sm); font-weight: 500; }
+html[data-page="app"] .ap-upload input[type="file"] { max-width: 320px; font-size: var(--app-sm); }
+html[data-page="app"] .ap-upload select, html[data-page="app"] .ap-link-select select, html[data-page="app"] .ap-fields input { font: inherit; padding: 6px 8px; border: 1px solid var(--color-rule-strong); border-radius: 6px; background: var(--color-paper); max-width: 100%; }
+html[data-page="app"] .ap-check { flex-direction: row !important; align-items: center; gap: 6px !important; }
+
+html[data-page="app"] .ap-review-head { display: flex; justify-content: space-between; gap: var(--space-sm); align-items: flex-start; }
+html[data-page="app"] .ap-review-head h3 { margin: 0 0 2px; font-size: var(--app-lg); }
+html[data-page="app"] .ap-review-grid { display: grid; grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr); gap: var(--space-md); margin-top: var(--space-sm); }
+html[data-page="app"] .ap-preview img, html[data-page="app"] .ap-preview iframe { width: 100%; height: 380px; object-fit: contain; border: 1px solid var(--color-edge); border-radius: 8px; background: var(--color-paper); }
+html[data-page="app"] .ap-field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--space-sm); margin-bottom: var(--space-md); }
+html[data-page="app"] .ap-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--app-sm); }
+html[data-page="app"] .ap-field-title { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 5px; font-weight: 600; }
+html[data-page="app"] .ap-field small, html[data-page="app"] .ap-deadline-row small { color: var(--color-ink-2); line-height: 1.35; }
+html[data-page="app"] .ap-deadline-row { border-top: 1px solid var(--color-edge); padding: var(--space-xs) 0; display: flex; flex-direction: column; gap: 5px; font-size: var(--app-sm); }
+html[data-page="app"] .ap-deadline-inputs { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
+html[data-page="app"] .ap-link-select { margin-top: var(--space-sm); max-width: 420px; }
+html[data-page="app"] .ap-form-foot { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); flex-wrap: wrap; }
+html[data-page="app"] .ap-status { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--color-edge); color: var(--color-ink-2); }
+html[data-page="app"] .ap-status-found, html[data-page="app"] .ap-status-confirmed { border-color: color-mix(in oklab, #2f7d5b 55%, var(--color-edge)); color: #2f7d5b; }
+html[data-page="app"] .ap-status-derived { border-color: color-mix(in oklab, #5a6096 55%, var(--color-edge)); color: #5a6096; }
+html[data-page="app"] .ap-status-unclear, html[data-page="app"] .ap-status-conflicting { border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-edge)); color: var(--color-accent-ink, var(--color-accent)); }
+
+html[data-page="app"] .ap-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-md); align-items: start; }
+html[data-page="app"] .ap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+html[data-page="app"] .ap-list > li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: 8px 10px; border: 1px solid var(--color-edge); border-radius: 8px; background: var(--color-paper); font-size: var(--app-sm); }
+html[data-page="app"] .ap-list > li > button:not(.btn) { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; flex: 1; border: 0; background: none; text-align: left; cursor: pointer; color: inherit; font: inherit; padding: 0; }
+html[data-page="app"] .ap-list > li > button:not(.btn):hover strong, html[data-page="app"] .ap-list > li > button.is-selected strong { text-decoration: underline; }
+html[data-page="app"] .ap-list > li span { color: var(--color-ink-2); }
+html[data-page="app"] .ap-list-inline { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+html[data-page="app"] .ap-actions { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+html[data-page="app"] .ap-actions input[type="date"] { font: var(--app-xs)/1 var(--font-body); padding: 3px 5px; border: 1px solid var(--color-rule-strong); border-radius: 6px; background: var(--color-paper); color: var(--color-ink); max-width: 150px; }
+html[data-page="app"] .ap-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-sm); }
+html[data-page="app"] .ap-details dt { font-size: var(--app-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-ink-2); }
+html[data-page="app"] .ap-details dd { margin: 2px 0 0; }
+
+@media (max-width: 46rem) {
+  html[data-page="app"] .ap-review-grid { grid-template-columns: 1fr; }
+  html[data-page="app"] .ap-preview img, html[data-page="app"] .ap-preview iframe { height: 260px; }
+}

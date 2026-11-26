@@ -41,10 +41,10 @@ const ok = (label) => console.log(`  ✓ ${label}`);
 
 try {
   const status = await waitForServer();
-  assert.equal(status.apps.filter((a) => a.status === 'connected').length, 5, 'five MCP apps connected');
-  assert.equal(status.apps.flatMap((a) => a.tools).length, 26, 'twenty-six tools discovered');
-  assert.deepEqual(status.apps.flatMap((a) => a.tools.filter((t) => !t.readOnly).map((t) => t.name)).sort(), ['create_event', 'create_task', 'delete_size_profile', 'delete_wishlist_item', 'dismiss_reminder', 'reconcile_reminders', 'save_wishlist_item', 'update_size_profile', 'update_wishlist_item']);
-  ok('5 MCP servers connected, 26 tools, 9 marked as changing data');
+  assert.equal(status.apps.filter((a) => a.status === 'connected').length, 6, 'six MCP apps connected');
+  assert.equal(status.apps.flatMap((a) => a.tools).length, 40, 'forty tools discovered');
+  assert.deepEqual(status.apps.flatMap((a) => a.tools.filter((t) => !t.readOnly).map((t) => t.name)).sort(), ['confirm_appliance_document', 'create_appliance_reminder', 'create_event', 'create_task', 'delete_size_profile', 'delete_wishlist_item', 'dismiss_reminder', 'reconcile_appliance_reminders', 'reconcile_reminders', 'save_appliance', 'save_wishlist_item', 'update_appliance', 'update_appliance_deadline', 'update_appliance_reminder', 'update_size_profile', 'update_wishlist_item']);
+  ok('6 MCP servers connected, 40 tools, 16 marked as changing data');
 
   // Question 1
   const q1 = await ask(status.suggestions[0]);
@@ -107,7 +107,7 @@ try {
 
   // Reset, then dismiss a draft
   const reset = await post('/api/reset');
-  assert.equal(reset.apps.filter((a) => a.status === 'connected').length, 5);
+  assert.equal(reset.apps.filter((a) => a.status === 'connected').length, 6);
   const q5 = await ask(status.suggestions[0]);
   assert.equal(q5.answer.proposals.length, 2, 'sample data back to the start');
   ok('reset restores the sample data');
@@ -125,6 +125,19 @@ try {
   const activity = (await fetch(`${base}/api/activity`).then((r) => r.json())).activity;
   assert.ok(activity.filter((x) => x.server === 'wishlist' && x.tool === 'match_product_size').every((x) => x.args?.redacted === true), 'size activity arguments are redacted');
   ok('wishlist occasion matching and deterministic size recommendation cite records without logging measurements');
+
+  // Appliances & Bills: route guard, upload validation and cited offline Q&A.
+  const applianceList = await fetch(`${base}/api/appliances`).then((r) => r.json());
+  assert.ok(Array.isArray(applianceList.appliances), 'appliance list is reachable through the MCP server');
+  const badUpload = new FormData();
+  badUpload.append('file', new Blob(['not a bill'], { type: 'text/plain' }), 'note.txt');
+  const uploadResponse = await fetch(`${base}/api/appliances/documents`, { method: 'POST', body: badUpload });
+  assert.equal(uploadResponse.status, 400, 'unsupported upload types are rejected');
+  const warranty = await ask('Which warranties expire soon?');
+  assert.ok(!warranty.error, warranty.error?.message);
+  assert.ok(warranty.answer.caveats.some((c) => /unconfirmed fields/i.test(c)), 'appliance answers say that unconfirmed fields are excluded');
+  assert.ok(warranty.answer.sections.every((s) => s.items.every((it) => it.sourceIds.length > 0)), 'appliance points cite MCP records');
+  ok('appliances MCP tools are reachable, uploads are validated, and appliance answers cite records');
 
   const unknown = await ask('What is the weather?');
   assert.match(unknown.answer.headline, /Offline mode/);

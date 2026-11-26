@@ -10,6 +10,7 @@ export const SERVER_DEFS = [
   { id: 'tasks', name: 'Tasks', script: 'mcp-servers/tasks.js', blurb: 'To-dos and due dates' },
   { id: 'money', name: 'Money', script: 'mcp-servers/money.js', blurb: 'Imported statement' },
   { id: 'wishlist', name: 'Wishlist & sizes', script: 'mcp-servers/wishlist.js', blurb: 'Saved products and size intelligence' },
+  { id: 'appliances', name: 'Appliances & Bills', script: 'mcp-servers/appliances.js', blurb: 'Bills, warranties and deadlines' },
 ];
 
 // Shown in the UI as planned. Nothing here is connected.
@@ -18,7 +19,6 @@ export const PLANNED = [
   { id: 'fitness', name: 'Fitness apps', blurb: 'Workouts and activity' },
   { id: 'travel', name: 'Travel', blurb: 'Bookings and itineraries' },
   { id: 'learning', name: 'Learning', blurb: 'Classes and deadlines' },
-  { id: 'home', name: 'Home', blurb: 'Bills and warranties' },
 ];
 
 /** A tool only runs without approval if its server explicitly marks it read-only. */
@@ -54,7 +54,7 @@ export class Hub {
     const entry = { def, client: null, tools: [], status: 'connecting', enabled, error: null, data: 'sample data' };
     this.servers.set(def.id, entry);
     const env = Object.fromEntries(
-      ['PATH', 'HOME', 'TZ', 'WEAVE_TODAY', 'WEAVE_STATEMENT_CSV', 'MONGODB_URI', 'MONGODB_DB_NAME', 'WEAVE_PROFILE_ENCRYPTION_KEY'].filter((k) => process.env[k]).map((k) => [k, process.env[k]]),
+      ['PATH', 'HOME', 'TZ', 'WEAVE_TODAY', 'WEAVE_STATEMENT_CSV', 'MONGODB_URI', 'MONGODB_DB_NAME', 'WEAVE_PROFILE_ENCRYPTION_KEY', 'APPLIANCE_REMINDER_WINDOWS', 'APPLIANCE_EMI_MONTHS_AHEAD', 'WEAVE_UPLOAD_DIR'].filter((k) => process.env[k]).map((k) => [k, process.env[k]]),
     );
     try {
       const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(this.root, def.script)], cwd: this.root, env, stderr: 'inherit' });

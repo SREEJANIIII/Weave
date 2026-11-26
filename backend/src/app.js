@@ -4,6 +4,7 @@ import cors from 'cors';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createApiRouter } from './routes/api.js';
+import { createAppliancesRouter } from './routes/appliances.js';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -51,6 +52,7 @@ export function createApp({ root, hub, proposals, state, port }) {
 
   // JSON body parsing with the same 64 KB ceiling as the old readJson helper.
   app.use('/api', express.json({ limit: '64000b', strict: false }));
+  app.use('/api/appliances', createAppliancesRouter({ hub }));
   app.use('/api', createApiRouter({ hub, proposals, state }));
 
   // Built React app (or the Vite source tree before a build), with the original cache rules.

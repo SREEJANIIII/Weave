@@ -50,6 +50,8 @@ function parsePlan(body) {
 
 export async function runOffline(run) {
   const q = run.question.toLowerCase();
+  const appliance = /warrant|amc|\bemi\b|appliance|servic|return|replace|washing machine|refrigerator|\bac\b/.test(q);
+  if (appliance) return run.finish(await appliances(run));
   const wishlist = /wishlist|saved|diwali|wedding|birthday|occasion|size|outfit|product/.test(q);
   if (wishlist) return run.finish(await wishlistAndOccasions(run));
   const daily = /follow[\s-]?up|to-?dos?|action items?|workout|exercise|\brun\b|gym|fit in/.test(q);
@@ -114,6 +116,52 @@ async function wishlistAndOccasions(run) {
   }
   const headline = items.length ? `I found ${items.length} saved product${items.length === 1 ? '' : 's'} relevant to your question.` : occasion ? `I couldn't find saved products for ${occasion}.` : 'Your wishlist is empty.';
   return { headline, sections, caveats: ['Wishlist and size charts are sample data; product platforms are not connected.', ...(events.length ? [] : ['No matching upcoming calendar event was found in the requested window.'])] };
+}
+
+async function appliances(run) {
+  const today = isoDate(now());
+  const q = run.question.toLowerCase();
+  if (!run.hub.isAvailable('appliances')) {
+    return { headline: "Appliances & Bills is switched off, so I can't check your bills or deadlines.", sections: [], caveats: ['Switch Appliances & Bills back on in the left panel.'] };
+  }
+  const soon = /soon|upcoming|renew|expir|this month/.test(q);
+  const match = q.match(/next (\d+) days/);
+  const withinDays = match ? Math.min(Number(match[1]), 730) : soon ? 30 : 365;
+  const result = await run.read('appliances', 'get_upcoming_deadlines', { withinDays });
+  if (!result.ok) return { headline: "I couldn't read your appliance deadlines.", sections: [], caveats: [result.error] };
+  const names = await run.read('appliances', 'search_appliances', {});
+  const byId = new Map((names.raw?.appliances ?? []).map((a) => [a.id, a]));
+  const type = /warrant/.test(q) ? 'warranty_expiry'
+    : /amc/.test(q) ? 'amc_renewal'
+    : /emi|payment| instalment|installment/.test(q) ? 'emi_payment'
+    : /return|replac/.test(q) ? 'return_window'
+    : /servic/.test(q) ? 'service'
+    : null;
+  const keyword = (q.match(/washing machine|refrigerator|\bac\b|tv|laptop|cooler/) ?? [])[0]?.replace(/\bac\b/i, 'ac');
+  let deadlines = result.raw?.deadlines ?? [];
+  if (type) deadlines = deadlines.filter((d) => d.type === type);
+  if (keyword) deadlines = deadlines.filter((d) => String(byId.get(d.applianceId)?.name ?? '').toLowerCase().includes(keyword.toLowerCase()));
+  if (/this month/.test(q)) deadlines = deadlines.filter((d) => d.dueDate.slice(0, 7) === today.slice(0, 7));
+
+  const items = deadlines.slice(0, 12).map((d) => {
+    const appliance = byId.get(d.applianceId);
+    const subject = appliance?.name ?? 'An appliance';
+    const money = d.amount === null || d.amount === undefined ? '' : ` Amount: ${d.currency ?? 'INR'} ${d.amount}.`;
+    return {
+      text: `${subject}: ${d.title} on ${d.dueDate}.${money}`,
+      detail: d.sourceDocumentId ? 'From a confirmed document.' : 'Confirmed manually.',
+      source_ids: [`appliances:${d.id}`, ...(appliance ? [`appliances:${appliance.id}`] : [])],
+    };
+  });
+  const sections = items.length ? [{ title: 'Confirmed appliance deadlines', items }] : [];
+  const headline = items.length
+    ? `${plural(items.length, 'confirmed deadline')} match${items.length === 1 ? 'es' : ''} your question.`
+    : 'No confirmed appliance deadline matched that question.';
+  return {
+    headline,
+    sections,
+    caveats: ['Only deadlines you confirmed are included; unconfirmed fields from documents are never used.', ...(items.length ? [] : ['Check the Appliances dashboard or confirm the relevant document first.'])],
+  };
 }
 
 async function followUpsAndWorkout(run) {
