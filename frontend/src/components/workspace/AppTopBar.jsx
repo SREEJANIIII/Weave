@@ -1,8 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { Icon, LogoLockup } from '../Icons';
 
-export function AppTopBar({ status, busy, offline, onSetMode, onReset }) {
+export function AppTopBar({ status, busy, offline, reminderCount = 0, onSetMode, onReset }) {
   const [resetState, setResetState] = useState('idle'); // 'idle' | 'confirm' | 'running'
   const confirmBtnRef = useRef(null);
   const modeRefs = useRef({});
@@ -39,6 +39,30 @@ export function AppTopBar({ status, busy, offline, onSetMode, onReset }) {
           <LogoLockup />
         </Link>
         <span className="bar-tag">Prototype</span>
+
+        <nav className="bar-nav" aria-label="Workspace views">
+          <NavLink
+            to="/app"
+            end
+            className={({ isActive }) => `bar-nav-link${isActive ? ' is-active' : ''}`}
+          >
+            Ask Weave
+          </NavLink>
+          <NavLink
+            to="/app/wishlist"
+            className={({ isActive }) => `bar-nav-link${isActive ? ' is-active' : ''}`}
+          >
+            <span>Wishlist</span>
+            {reminderCount > 0 && <span className="bar-nav-badge">{reminderCount}</span>}
+          </NavLink>
+          <NavLink
+            to="/app/size-profile"
+            className={({ isActive }) => `bar-nav-link${isActive ? ' is-active' : ''}`}
+          >
+            My Size Profile
+          </NavLink>
+        </nav>
+
         <span className="bar-date">{status?.todayLabel ?? ''}</span>
         <div className="bar-tools">
           <div className="planner" role="radiogroup" aria-label="Planner">
@@ -74,11 +98,11 @@ export function AppTopBar({ status, busy, offline, onSetMode, onReset }) {
             {resetState === 'running' ? (
               <>
                 <span className="spinner" aria-hidden="true" />
-                <span className="reset-q">Restarting the MCP servers</span>
+                <span className="reset-q">Restarting</span>
               </>
             ) : resetState === 'confirm' ? (
               <>
-                <span className="reset-q">Restore the sample data?</span>
+                <span className="reset-q">Restore sample data?</span>
                 <button
                   ref={confirmBtnRef}
                   className="btn btn-primary btn-sm"
@@ -99,7 +123,8 @@ export function AppTopBar({ status, busy, offline, onSetMode, onReset }) {
               <button
                 className="btn btn-quiet btn-sm"
                 type="button"
-                disabled={busy || offline}
+                disabled={busy}
+                title={offline ? 'Restore sample Wishlist & Size Profile data' : 'Restore sample MCP and Wishlist data'}
                 onClick={() => {
                   setResetState('confirm');
                   requestAnimationFrame(() => confirmBtnRef.current?.focus());
@@ -115,4 +140,3 @@ export function AppTopBar({ status, busy, offline, onSetMode, onReset }) {
     </header>
   );
 }
-

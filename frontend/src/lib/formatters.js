@@ -1,10 +1,11 @@
-export const YARN = { calendar: 'calendar', notes: 'notes', tasks: 'tasks', money: 'money' };
+export const YARN = { calendar: 'calendar', notes: 'notes', tasks: 'tasks', money: 'money', wishlist: 'wishlist' };
 
 export const ICON = {
   calendar: 'i-calendar',
   notes: 'i-notes',
   tasks: 'i-tasks',
   money: 'i-money',
+  wishlist: 'i-heart',
   email: 'i-mail',
   fitness: 'i-fitness',
   travel: 'i-plug',

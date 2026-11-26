@@ -31,6 +31,7 @@ html[data-page="app"] [data-yarn="calendar"] { --yarn: var(--yarn-calendar); --y
 html[data-page="app"] [data-yarn="notes"] { --yarn: var(--yarn-notes); --yarn-line: var(--yarn-notes-deep); }
 html[data-page="app"] [data-yarn="tasks"] { --yarn: var(--yarn-tasks); --yarn-line: var(--yarn-tasks); }
 html[data-page="app"] [data-yarn="money"] { --yarn: var(--yarn-workout); --yarn-line: var(--yarn-workout); }
+html[data-page="app"] [data-yarn="wishlist"] { --yarn: var(--yarn-wishlist); --yarn-line: var(--yarn-wishlist-deep); }
 html[data-page="app"] [data-yarn="email"],  html[data-page="app"] [data-yarn="fitness"],  html[data-page="app"] [data-yarn="travel"],  html[data-page="app"] [data-yarn="learning"],  html[data-page="app"] [data-yarn="home"] { --yarn: var(--color-rule-strong); --yarn-line: var(--color-edge); }
 /* A small woven swatch: the app's yarn over a light weft */
 html[data-page="app"] .swatch { display: inline-block; width: 14px; height: 14px; flex-shrink: 0; border-radius: 3px; background: repeating-linear-gradient(-45deg, var(--yarn) 0 3px, var(--color-paper-2) 3px 5px); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--yarn) 60%, var(--color-paper)); }
@@ -56,11 +57,12 @@ html[data-page="app"] .spinner { width: 14px; height: 14px; border-radius: 50%; 
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { html[data-page="app"] .spinner { animation-duration: 1600ms !important; animation-iteration-count: infinite !important; } }
 
-html[data-page="app"] input,  html[data-page="app"] textarea { color: var(--color-ink); }
+html[data-page="app"] input,  html[data-page="app"] textarea,  html[data-page="app"] select { color: var(--color-ink); }
 html[data-page="app"] .field { display: grid; gap: var(--space-3xs); }
 html[data-page="app"] .field label { font-size: var(--app-xs); color: var(--color-muted); }
-html[data-page="app"] .field input { min-height: var(--control); padding: 0 var(--space-sm); border: 1px solid var(--color-edge); border-radius: var(--radius-inner); background: var(--color-paper-3); font: inherit; font-size: 1rem; }
-html[data-page="app"] .field input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+html[data-page="app"] .field input,  html[data-page="app"] .field select,  html[data-page="app"] .field textarea { min-height: var(--control); padding: 0 var(--space-sm); border: 1px solid var(--color-edge); border-radius: var(--radius-inner); background: var(--color-paper-3); font: inherit; font-size: 1rem; }
+html[data-page="app"] .field textarea { padding: var(--space-xs) var(--space-sm); resize: vertical; }
+html[data-page="app"] .field input:focus-visible,  html[data-page="app"] .field select:focus-visible,  html[data-page="app"] .field textarea:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
 
 /* ---------- Top bar ---------- */
 html[data-page="app"] .bar { position: sticky; top: 0; z-index: var(--z-sticky-nav); background: var(--color-paper); border-bottom: 1px solid var(--color-rule); }
@@ -292,4 +294,279 @@ html[data-page="app"] .toast.is-on { opacity: 1; }
   html[data-page="app"] .step-app { display: none; }
   html[data-page="app"] .draft { padding: var(--space-md); }
   html[data-page="app"] .draft-edit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+/* ---------- Workspace Top Navigation ---------- */
+html[data-page="app"] .bar-nav {
+  display: inline-flex; align-items: center; gap: var(--space-3xs);
+  padding: var(--space-2xs); border: 1px solid var(--color-rule-strong); border-radius: var(--radius-pill);
+  background: var(--color-paper-2);
+}
+html[data-page="app"] .bar-nav-link {
+  display: inline-flex; align-items: center; gap: var(--space-2xs);
+  min-height: 28px; padding: 0 var(--space-sm); border-radius: var(--radius-pill);
+  font-size: var(--app-sm); font-weight: 500; color: var(--color-ink-2); text-decoration: none; white-space: nowrap;
+  transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+html[data-page="app"] .bar-nav-link:hover { color: var(--color-ink); }
+html[data-page="app"] .bar-nav-link.is-active { background: var(--color-paper-3); color: var(--color-ink); box-shadow: var(--shadow-segment); font-weight: 600; }
+html[data-page="app"] .bar-nav-badge {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: var(--radius-pill); background: var(--yarn-wishlist); color: var(--color-paper);
+  font-size: 0.6875rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Wishlist & Size Profile Shell ---------- */
+html[data-page="app"] .wl-shell { max-width: 1320px; margin-inline: auto; padding: var(--space-xl) var(--space-xl) var(--space-3xl); }
+html[data-page="app"] .wl-page,  html[data-page="app"] .sp-page { display: grid; gap: var(--space-lg); }
+html[data-page="app"] .wl-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
+html[data-page="app"] .wl-head-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+html[data-page="app"] .wl-sample-tag {
+  display: inline-flex; align-items: center; padding: 2px var(--space-xs);
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-chip);
+  background: var(--color-paper-2); font-size: var(--app-xs); color: var(--color-ink-2); font-weight: 500;
+}
+
+/* Occasion Reminders */
+html[data-page="app"] .wl-reminders {
+  display: grid; gap: var(--space-sm); padding: var(--space-md);
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-2);
+}
+html[data-page="app"] .wl-reminders-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+html[data-page="app"] .wl-reminders-title { display: inline-flex; align-items: center; gap: var(--space-xs); font-weight: 600; font-size: var(--app-sm); }
+html[data-page="app"] .wl-reminders-title .icon { color: var(--color-signal); }
+html[data-page="app"] .wl-reminders-list { display: grid; gap: var(--space-xs); }
+html[data-page="app"] .wl-reminder-card {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md); border: 1px solid var(--color-rule); border-radius: var(--radius-inner);
+  background: var(--color-paper-3);
+}
+html[data-page="app"] .wl-reminder-main { display: grid; gap: var(--space-3xs); }
+html[data-page="app"] .wl-reminder-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); font-size: var(--app-sm); }
+html[data-page="app"] .wl-reminder-sub { font-size: var(--app-xs); color: var(--color-ink-2); }
+html[data-page="app"] .wl-reminder-actions { display: flex; align-items: center; gap: var(--space-xs); }
+html[data-page="app"] .wl-day-pill {
+  padding: 1px var(--space-xs); border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--yarn-calendar) 14%, var(--color-paper)); color: var(--color-signal);
+  font-size: var(--app-xs); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+html[data-page="app"] .wl-window-pill {
+  padding: 1px var(--space-xs); border-radius: var(--radius-pill);
+  border: 1px solid var(--color-rule-strong); background: var(--color-paper-2);
+  font-size: var(--app-xs); color: var(--color-ink-2);
+}
+html[data-page="app"] .wl-window-pill.is-muted { opacity: 0.65; }
+
+/* Wishlist Controls & Filters */
+html[data-page="app"] .wl-controls { display: grid; gap: var(--space-sm); }
+html[data-page="app"] .wl-search {
+  position: relative; display: flex; align-items: center; max-width: 420px;
+}
+html[data-page="app"] .wl-search .icon { position: absolute; left: var(--space-sm); color: var(--color-muted); pointer-events: none; }
+html[data-page="app"] .wl-search input {
+  width: 100%; min-height: var(--control); padding: 0 var(--space-sm) 0 calc(var(--space-sm) + 1.4rem);
+  border: 1px solid var(--color-edge); border-radius: var(--radius-pill); background: var(--color-paper-3); font-size: var(--app-sm);
+}
+html[data-page="app"] .wl-filter-group { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+html[data-page="app"] .wl-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+html[data-page="app"] .wl-pill-btn {
+  min-height: 30px; padding: 0 var(--space-sm); border: 1px solid var(--color-rule-strong); border-radius: var(--radius-pill);
+  background: var(--color-paper-3); color: var(--color-ink-2); font-size: var(--app-xs); font-weight: 500; cursor: pointer;
+  transition: border-color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+html[data-page="app"] .wl-pill-btn:hover { border-color: var(--color-ink); color: var(--color-ink); }
+html[data-page="app"] .wl-pill-btn.is-on { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-paper); }
+html[data-page="app"] .wl-select-inline { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--app-xs); color: var(--color-ink-2); }
+html[data-page="app"] .wl-select-inline select {
+  min-height: 30px; padding: 0 var(--space-xs); border: 1px solid var(--color-rule-strong); border-radius: var(--radius-chip);
+  background: var(--color-paper-3); font-size: var(--app-xs); color: var(--color-ink);
+}
+
+/* Product Card Grid */
+html[data-page="app"] .wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-lg); }
+html[data-page="app"] .wl-card {
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-3);
+  box-shadow: var(--shadow-card); transition: transform var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+html[data-page="app"] .wl-card:hover { border-color: var(--color-ink); transform: translateY(-2px); }
+html[data-page="app"] .wl-card-media { position: relative; aspect-ratio: 4 / 3; background: var(--color-paper-2); overflow: hidden; border-bottom: 1px solid var(--color-rule); }
+html[data-page="app"] .wl-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+html[data-page="app"] .wl-card-img-fallback { width: 100%; height: 100%; display: grid; place-items: center; color: var(--color-muted); font-size: 2rem; }
+html[data-page="app"] .wl-occ-badge {
+  position: absolute; top: var(--space-sm); left: var(--space-sm);
+  padding: 3px var(--space-sm); border-radius: var(--radius-pill);
+  background: var(--color-paper-3); border: 1px solid var(--yarn-line); color: var(--color-ink);
+  font-size: var(--app-xs); font-weight: 600; box-shadow: inset 0 -2px 0 var(--yarn);
+}
+html[data-page="app"] .wl-img-sample {
+  position: absolute; top: var(--space-sm); right: var(--space-sm);
+  padding: 2px 6px; border-radius: var(--radius-chip);
+  background: color-mix(in oklab, var(--color-ink) 78%, transparent); color: var(--color-paper);
+  font-size: 0.6875rem; font-weight: 500;
+}
+html[data-page="app"] .wl-card-body { display: flex; flex: 1; flex-direction: column; gap: var(--space-xs); padding: var(--space-md); }
+html[data-page="app"] .wl-card-meta-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); font-size: var(--app-xs); }
+html[data-page="app"] .wl-brand { font-weight: 600; color: var(--color-ink-2); text-transform: uppercase; letter-spacing: 0.03em; }
+html[data-page="app"] .wl-cat { padding: 1px 6px; border-radius: var(--radius-chip); background: var(--color-paper-2); color: var(--color-muted); }
+html[data-page="app"] .wl-card-title { font-family: var(--font-display); font-size: var(--app-lg); line-height: 1.25; letter-spacing: -0.015em; }
+html[data-page="app"] .wl-card-notes { font-size: var(--app-xs); color: var(--color-ink-2); line-height: 1.45; }
+html[data-page="app"] .wl-card-signals { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: auto; padding-top: var(--space-xs); }
+html[data-page="app"] .wl-size-chip,  html[data-page="app"] .wl-cal-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px var(--space-xs);
+  border-radius: var(--radius-chip); font-size: var(--app-xs); font-weight: 600;
+}
+html[data-page="app"] .wl-size-chip.is-recommended { background: color-mix(in oklab, var(--color-go) 12%, var(--color-paper)); color: var(--color-go); border: 1px solid color-mix(in oklab, var(--color-go) 35%, transparent); }
+html[data-page="app"] .wl-size-chip.is-ambiguous { background: color-mix(in oklab, var(--yarn-notes) 25%, var(--color-paper)); color: var(--color-ink); border: 1px solid var(--yarn-notes-deep); }
+html[data-page="app"] .wl-size-chip.is-no_chart,  html[data-page="app"] .wl-size-chip.is-incomplete_profile { background: var(--color-paper-2); color: var(--color-muted); border: 1px dashed var(--color-rule-strong); font-weight: 500; }
+html[data-page="app"] .wl-cal-chip { background: color-mix(in oklab, var(--yarn-calendar) 12%, var(--color-paper)); color: var(--color-signal); border: 1px solid color-mix(in oklab, var(--yarn-calendar) 30%, transparent); }
+html[data-page="app"] .wl-card-foot { display: flex; align-items: center; justify-content: space-between; font-size: var(--app-xs); color: var(--color-muted); padding-top: var(--space-2xs); }
+html[data-page="app"] .wl-ext-link { display: inline-flex; align-items: center; gap: 3px; color: var(--color-ink-2); text-decoration: none; }
+html[data-page="app"] .wl-ext-link:hover { color: var(--color-ink); text-decoration: underline; }
+html[data-page="app"] .wl-card-actions { display: flex; align-items: center; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--color-rule); }
+html[data-page="app"] .wl-find-size-btn { flex: 1; }
+html[data-page="app"] .wl-confirm-del { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+html[data-page="app"] .wl-empty { border: 1px dashed var(--color-rule-strong); border-radius: var(--radius-card); display: grid; gap: var(--space-xs); justify-items: center; }
+
+/* Modals (Add/Edit + Size Intelligence) */
+html[data-page="app"] .wl-modal-backdrop {
+  position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center; padding: var(--space-md);
+  background: color-mix(in oklab, var(--color-night) 55%, transparent); backdrop-filter: blur(2px);
+}
+html[data-page="app"] .wl-modal {
+  width: min(680px, 100%); max-height: min(90dvh, 860px); overflow-y: auto;
+  padding: var(--space-lg); border-radius: calc(var(--radius-card) + 4px);
+  border: 1px solid var(--color-rule-strong); background: var(--color-paper-3); box-shadow: var(--shadow-lift);
+  display: grid; gap: var(--space-md);
+}
+html[data-page="app"] .wl-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
+html[data-page="app"] .wl-modal-head h2 { font-family: var(--font-display); font-size: var(--app-xl); line-height: 1.2; }
+html[data-page="app"] .wl-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); font-size: var(--app-xs); color: var(--color-ink-2); margin-bottom: var(--space-2xs); }
+html[data-page="app"] .wl-icon-btn {
+  display: inline-grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--color-rule-strong);
+  border-radius: 50%; background: var(--color-paper); color: var(--color-ink); cursor: pointer;
+}
+html[data-page="app"] .wl-icon-btn:hover { border-color: var(--color-ink); }
+html[data-page="app"] .wl-form { display: grid; gap: var(--space-md); }
+html[data-page="app"] .wl-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
+html[data-page="app"] .wl-span-2 { grid-column: 1 / -1; }
+html[data-page="app"] .wl-preset-row { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin-top: var(--space-2xs); }
+html[data-page="app"] .wl-preset-chip {
+  padding: 2px var(--space-xs); border: 1px solid var(--color-rule-strong); border-radius: var(--radius-chip);
+  background: var(--color-paper); font-size: var(--app-xs); color: var(--color-ink-2); cursor: pointer;
+}
+html[data-page="app"] .wl-preset-chip.is-selected { border-color: var(--color-ink); background: var(--color-ink); color: var(--color-paper); }
+html[data-page="app"] .wl-modal-foot { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--color-rule); }
+
+/* Size Intelligence Modal Tables */
+html[data-page="app"] .wl-rec-box {
+  padding: var(--space-md); border-radius: var(--radius-inner); border: 1px solid var(--color-rule-strong); background: var(--color-paper-2);
+  display: grid; gap: var(--space-xs);
+}
+html[data-page="app"] .wl-rec-box.is-recommended { border-color: color-mix(in oklab, var(--color-go) 45%, var(--color-rule)); background: color-mix(in oklab, var(--color-go) 8%, var(--color-paper-3)); }
+html[data-page="app"] .wl-rec-box.is-ambiguous { border-color: var(--yarn-notes-deep); background: color-mix(in oklab, var(--yarn-notes) 14%, var(--color-paper-3)); }
+html[data-page="app"] .wl-rec-box.is-no_chart,  html[data-page="app"] .wl-rec-box.is-incomplete_profile { border-style: dashed; }
+html[data-page="app"] .wl-rec-badge-wrap { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-sm); }
+html[data-page="app"] .wl-rec-label { font-size: var(--app-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-ink-2); }
+html[data-page="app"] .wl-rec-size { font-family: var(--font-display); font-size: var(--app-2xl); line-height: 1; color: var(--color-ink); }
+html[data-page="app"] .wl-rec-size small { font-size: var(--app-md); font-weight: 500; color: var(--color-ink-2); }
+html[data-page="app"] .wl-rec-explain { font-size: var(--app-sm); color: var(--color-ink); }
+html[data-page="app"] .wl-caveats { display: grid; gap: var(--space-2xs); padding: var(--space-sm); border-radius: var(--radius-inner); background: var(--color-paper-2); font-size: var(--app-xs); color: var(--color-ink-2); }
+html[data-page="app"] .wl-caveats p { display: flex; gap: var(--space-xs); align-items: flex-start; }
+html[data-page="app"] .wl-section-block { display: grid; gap: var(--space-xs); }
+html[data-page="app"] .wl-section-block h3 { font-size: var(--app-sm); font-family: var(--font-body); font-weight: 600; }
+html[data-page="app"] .wl-chart-head { display: grid; gap: 2px; }
+html[data-page="app"] .wl-chart-note { font-size: var(--app-xs); color: var(--color-muted); }
+html[data-page="app"] .wl-table-wrap { overflow-x: auto; border: 1px solid var(--color-rule); border-radius: var(--radius-inner); }
+html[data-page="app"] .wl-table { width: 100%; border-collapse: collapse; font-size: var(--app-xs); text-align: left; }
+html[data-page="app"] .wl-table th,  html[data-page="app"] .wl-table td { padding: var(--space-xs) var(--space-sm); border-bottom: 1px solid var(--color-rule); white-space: nowrap; }
+html[data-page="app"] .wl-table th { background: var(--color-paper-2); color: var(--color-ink-2); font-weight: 600; }
+html[data-page="app"] .wl-table tr:last-child td { border-bottom: 0; }
+html[data-page="app"] .wl-table tr.is-active { background: color-mix(in oklab, var(--color-go) 10%, var(--color-paper-3)); }
+html[data-page="app"] .wl-table tr.is-alt { background: color-mix(in oklab, var(--yarn-notes) 12%, var(--color-paper-3)); }
+html[data-page="app"] .wl-row-tag { margin-left: var(--space-xs); padding: 1px 6px; border-radius: var(--radius-pill); background: var(--color-go); color: var(--color-paper); font-size: 0.6875rem; font-weight: 600; }
+html[data-page="app"] .wl-row-tag.is-alt { background: var(--yarn-notes-deep); color: var(--color-ink); }
+html[data-page="app"] .wl-verdict { font-weight: 600; }
+html[data-page="app"] .wl-verdict.is-match { color: var(--color-go); }
+html[data-page="app"] .wl-verdict.is-ease,  html[data-page="app"] .wl-verdict.is-snug { color: var(--color-ink-2); }
+html[data-page="app"] .wl-verdict.is-tight,  html[data-page="app"] .wl-verdict.is-loose { color: var(--color-signal); }
+
+/* Personal Size Profile */
+html[data-page="app"] .sp-privacy-banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-md);
+  padding: var(--space-md); border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-2);
+}
+html[data-page="app"] .sp-privacy-copy { display: flex; align-items: flex-start; gap: var(--space-sm); max-width: 68ch; }
+html[data-page="app"] .sp-privacy-copy .icon { margin-top: 3px; color: var(--color-go); }
+html[data-page="app"] .sp-privacy-copy p { font-size: var(--app-xs); color: var(--color-ink-2); margin-top: 2px; }
+html[data-page="app"] .sp-privacy-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+html[data-page="app"] .sp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-lg); align-items: start; }
+html[data-page="app"] .sp-card {
+  display: grid; gap: var(--space-md); padding: var(--space-lg);
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-3);
+}
+html[data-page="app"] .sp-card-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-sm); }
+html[data-page="app"] .sp-card-head h2 { font-family: var(--font-display); font-size: var(--app-lg); }
+html[data-page="app"] .sp-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); }
+html[data-page="app"] .sp-hint { font-size: 0.7rem; color: var(--color-muted); }
+html[data-page="app"] .sp-fit-section { display: grid; gap: var(--space-xs); }
+html[data-page="app"] .sp-fit-title { font-size: var(--app-xs); font-weight: 600; color: var(--color-ink-2); }
+html[data-page="app"] .sp-fit-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-xs); }
+html[data-page="app"] .sp-fit-card {
+  display: grid; gap: 2px; padding: var(--space-sm); text-align: left; cursor: pointer;
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-inner); background: var(--color-paper);
+}
+html[data-page="app"] .sp-fit-card strong { font-size: var(--app-sm); }
+html[data-page="app"] .sp-fit-card span { font-size: 0.7rem; color: var(--color-muted); line-height: 1.3; }
+html[data-page="app"] .sp-fit-card.is-on { border-color: var(--color-ink); background: var(--color-paper-2); box-shadow: inset 0 -2px 0 var(--color-ink); }
+html[data-page="app"] .sp-form-foot { display: flex; align-items: center; gap: var(--space-md); padding-top: var(--space-xs); }
+html[data-page="app"] .sp-saved-msg { font-size: var(--app-sm); font-weight: 600; color: var(--color-go); }
+
+html[data-page="app"] .sp-lead-list { display: grid; gap: var(--space-xs); }
+html[data-page="app"] .sp-check-row { display: flex; align-items: center; gap: var(--space-xs); font-size: var(--app-sm); cursor: pointer; }
+html[data-page="app"] .sp-custom-days { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding-top: var(--space-xs); font-size: var(--app-sm); }
+html[data-page="app"] .sp-custom-days input { width: 96px; min-height: 34px; padding: 0 var(--space-xs); border: 1px solid var(--color-edge); border-radius: var(--radius-inner); background: var(--color-paper); }
+html[data-page="app"] .sp-occ-preview { display: grid; gap: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid var(--color-rule); }
+html[data-page="app"] .sp-occ-preview h3 { font-size: var(--app-sm); font-family: var(--font-body); }
+html[data-page="app"] .sp-occ-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xs); }
+html[data-page="app"] .sp-occ-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm); border: 1px solid var(--color-rule); border-radius: var(--radius-inner); background: var(--color-paper);
+}
+html[data-page="app"] .sp-occ-list li strong { display: block; font-size: var(--app-sm); }
+html[data-page="app"] .sp-occ-list li span { font-size: var(--app-xs); color: var(--color-muted); }
+html[data-page="app"] .sp-add-occ { display: grid; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--color-rule); }
+html[data-page="app"] .sp-add-occ-row { display: grid; grid-template-columns: 1.5fr 1fr 1fr auto; gap: var(--space-xs); }
+html[data-page="app"] .sp-add-occ-row input,  html[data-page="app"] .sp-add-occ-row select {
+  min-height: 34px; padding: 0 var(--space-xs); border: 1px solid var(--color-edge); border-radius: var(--radius-chip);
+  background: var(--color-paper); font-size: var(--app-xs); color: var(--color-ink);
+}
+
+/* Inline Wishlist & Size Cards inside Ask Weave */
+html[data-page="app"] .suggest button.is-wishlist { border-color: color-mix(in oklab, var(--yarn-wishlist) 40%, var(--color-rule-strong)); }
+html[data-page="app"] .suggest button.is-wishlist:hover:not(:disabled) { border-color: var(--yarn-wishlist-deep); }
+html[data-page="app"] .wl-inline-results { margin-top: var(--space-lg); display: grid; gap: var(--space-sm); }
+html[data-page="app"] .wl-inline-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+html[data-page="app"] .wl-inline-head h3 { font-size: var(--app-sm); font-family: var(--font-body); font-weight: 600; color: var(--color-ink-2); }
+html[data-page="app"] .wl-inline-grid { display: grid; gap: var(--space-xs); }
+html[data-page="app"] .wl-inline-card {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--space-sm); align-items: center;
+  padding: var(--space-xs) var(--space-sm); border: 1px solid var(--color-rule-strong); border-radius: var(--radius-inner);
+  background: var(--color-paper-3);
+}
+html[data-page="app"] .wl-inline-thumb { width: 56px; height: 44px; object-fit: cover; border-radius: var(--radius-chip); border: 1px solid var(--color-rule); }
+html[data-page="app"] .wl-inline-info { display: grid; gap: 2px; min-width: 0; }
+html[data-page="app"] .wl-inline-brand { font-size: var(--app-xs); color: var(--color-muted); }
+html[data-page="app"] .wl-inline-info strong { font-size: var(--app-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 64rem) {
+  html[data-page="app"] .bar-inner { flex-wrap: wrap; height: auto; padding-block: var(--space-xs); }
+  html[data-page="app"] .bar-nav { order: 3; width: 100%; justify-content: center; overflow-x: auto; }
+  html[data-page="app"] .wl-shell { padding: var(--space-lg) var(--space-md) var(--space-xl); }
+  html[data-page="app"] .sp-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 40rem) {
+  html[data-page="app"] .wl-form-grid,  html[data-page="app"] .sp-fields,  html[data-page="app"] .sp-fit-options,  html[data-page="app"] .sp-add-occ-row { grid-template-columns: minmax(0, 1fr); }
+  html[data-page="app"] .wl-inline-card { grid-template-columns: 44px minmax(0, 1fr); }
+  html[data-page="app"] .wl-inline-card .btn { grid-column: 1 / -1; justify-self: start; }
 }

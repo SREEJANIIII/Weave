@@ -16,9 +16,9 @@ import { useMagneticProps, usePageMeta } from '../hooks/usePageSetup';
 export function HomePage() {
   usePageMeta({
     page: 'home',
-    title: 'Weave: your next step, without opening five apps',
+    title: 'Weave: your next step, without opening multiple apps',
     description:
-      'Ask Weave about your day. It checks your calendar, notes and to-dos, gives you one clear answer, and asks before it changes anything.',
+      'Ask Weave about your day. It checks your calendar, notes, to-dos, wishlist and more, gives you one clear answer, and asks before it changes anything.',
   });
 
   const demoRef = useRef(null);

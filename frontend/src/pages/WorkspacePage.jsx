@@ -1,13 +1,28 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon } from '../components/Icons';
 import { AppTopBar } from '../components/workspace/AppTopBar';
 import { RunView } from '../components/workspace/RunView';
 import { InspectorPanel } from '../components/workspace/InspectorPanel';
+import { WishlistView } from '../components/wishlist/WishlistView';
+import { SizeProfileView } from '../components/profile/SizeProfileView';
+import { SizeIntelligenceModal } from '../components/wishlist/SizeIntelligenceModal';
 import { SHORT } from '../lib/formatters';
+import { matchOccasions } from '../lib/occasionMatcher';
+import { recommendSize } from '../lib/sizeEngine';
+import { buildWishlistRunResponse, isWishlistQuery } from '../lib/wishlistContextQA';
+import { useWishlistStore } from '../hooks/useWishlistStore';
 import { usePageMeta } from '../hooks/usePageSetup';
 
 const TABS = ['apps', 'sources', 'activity'];
+
+const WISHLIST_PROMPTS = [
+  'What outfits have I saved for Diwali?',
+  'Which of my saved outfits are likely to fit me?',
+  "My friend's wedding is next month. Do I have anything saved for it?",
+  'Show me the products I should revisit before my upcoming occasions.',
+  'Which size should I consider for this dress?',
+];
 
 async function api(path, body) {
   const res = await fetch(
@@ -19,11 +34,25 @@ async function api(path, body) {
 }
 
 export function WorkspacePage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const view = location.pathname.startsWith('/app/wishlist')
+    ? 'wishlist'
+    : location.pathname.startsWith('/app/size-profile')
+      ? 'size-profile'
+      : 'ask';
+
   usePageMeta({
     page: 'app',
-    title: 'Weave prototype: ask across your apps',
+    title:
+      view === 'wishlist'
+        ? 'Weave — Smart Wishlist'
+        : view === 'size-profile'
+          ? 'Weave — My Size Profile'
+          : 'Weave prototype: ask across your apps',
     description:
-      'Ask one question across your connected apps. Weave cites every record it reads and holds changes until you approve them.',
+      'Ask one question across your connected apps, manage your Smart Wishlist & Size Intelligence, and approve changes before anything runs.',
   });
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -39,6 +68,29 @@ export function WorkspacePage() {
   const [litN, setLitN] = useState(null);
   const [toastMsg, setToastMsg] = useState('');
   const [toastOn, setToastOn] = useState(false);
+  const [inspectedProduct, setInspectedProduct] = useState(null);
+
+  const {
+    wishlist,
+    sizeProfile,
+    reminderPrefs,
+    occasions,
+    addItem,
+    updateItem,
+    removeItem,
+    saveProfile,
+    clearProfileMeasurements,
+    updateReminderPrefs,
+    dismissReminder,
+    approveReminderEvent,
+    addOccasionEvent,
+    resetWishlistDemo,
+  } = useWishlistStore();
+
+  const activeReminderCount = useMemo(
+    () => matchOccasions(wishlist, occasions, reminderPrefs).filter((m) => m.inWindow && !m.dismissed).length,
+    [wishlist, occasions, reminderPrefs],
+  );
 
   const textareaRef = useRef(null);
   const runRef = useRef(null);
@@ -105,7 +157,35 @@ export function WorkspacePage() {
   const ask = useCallback(
     async (rawQ) => {
       const q = rawQ.trim();
-      if (!q || busy || offline) return;
+      if (!q || busy) return;
+
+      // Local Smart Wishlist & Size Intelligence contextual Q&A (works both offline & alongside backend)
+      if (isWishlistQuery(q, wishlist)) {
+        const seq = ++runSeqRef.current;
+        setLitN(null);
+        const localRun = buildWishlistRunResponse({
+          question: q,
+          wishlist,
+          sizeProfile,
+          occasions,
+          reminderPrefs,
+          onApproveReminder: approveReminderEvent,
+        });
+        setRun({ seq, ...localRun });
+        selectTab('sources');
+        requestAnimationFrame(() => {
+          runRef.current?.scrollIntoView({
+            block: 'start',
+            behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+          });
+        });
+        return;
+      }
+
+      if (offline) {
+        showToast('Start the Weave backend with npm start for Calendar/Notes/Tasks/Money questions, or ask about your Wishlist & Size Profile.');
+        return;
+      }
 
       const seq = ++runSeqRef.current;
       setBusy(true);
@@ -196,7 +276,7 @@ export function WorkspacePage() {
       await loadActivity();
       if (gotAnswer) selectTab('sources');
     },
-    [busy, offline, loadActivity, selectTab],
+    [busy, offline, status?.mode, wishlist, sizeProfile, occasions, reminderPrefs, approveReminderEvent, loadActivity, selectTab, showToast],
   );
 
   const handleSetMode = async (mode) => {
@@ -210,15 +290,19 @@ export function WorkspacePage() {
   };
 
   const handleReset = async () => {
-    const r = await api('/api/reset', {});
-    if (r.ok) {
-      setStatus(r.data);
-      setRun(null);
-      setLitN(null);
-    } else {
-      showToast(r.data.error ?? "Couldn't reset the demo.");
+    resetWishlistDemo();
+    if (!offline) {
+      const r = await api('/api/reset', {});
+      if (r.ok) {
+        setStatus(r.data);
+        loadActivity();
+      } else {
+        showToast(r.data.error ?? "Couldn't reset the backend MCP servers.");
+      }
     }
-    loadActivity();
+    setRun(null);
+    setLitN(null);
+    showToast('Sample data restored.');
   };
 
   const handleToggleApp = async (a) => {
@@ -241,6 +325,15 @@ export function WorkspacePage() {
   };
 
   const handleApprove = async (p, changes = {}) => {
+    if (typeof p.localAction === 'function') {
+      p.localAction();
+      updateProposal(p.id, {
+        status: 'done',
+        args: { ...p.args, ...changes },
+        conflicts: [],
+      });
+      return;
+    }
     updateProposal(p.id, { status: 'running' });
     const r = await api(`/api/proposals/${encodeURIComponent(p.id)}/approve`, { changes });
     if (r.data.proposal) updateProposal(p.id, r.data.proposal);
@@ -253,6 +346,10 @@ export function WorkspacePage() {
   };
 
   const handleDismiss = async (p) => {
+    if (typeof p.localAction === 'function') {
+      updateProposal(p.id, { status: 'dismissed' });
+      return;
+    }
     const r = await api(`/api/proposals/${encodeURIComponent(p.id)}/dismiss`, {});
     if (r.data.proposal) updateProposal(p.id, r.data.proposal);
     else showToast(r.data.error ?? "Couldn't dismiss that draft.");
@@ -290,87 +387,136 @@ export function WorkspacePage() {
   const hour = status?.hour ?? new Date().getHours();
   const greeting = hour < 12 ? 'Good morning.' : hour < 18 ? 'Good afternoon.' : 'Good evening.';
   const askSub = offline
-    ? 'Weave reads only what a question needs, cites every record, and holds changes for your\u00a0OK.'
+    ? 'Wishlist & Size Intelligence questions run directly on local sample data. Start the server (npm start) for live MCP tools across Calendar, Notes, Tasks and Money.'
     : !status
       ? 'Weave reads only what a question needs, cites every record, and holds changes for your\u00a0OK.'
       : status.mode === 'offline'
-        ? `The offline planner answers the two example questions below with real MCP calls on sample data.${
-            status.planners.claude.credentials ? ' Switch to Claude to ask anything.' : ' Add an Anthropic API key to ask anything.'
+        ? `Ask about your day or your Smart Wishlist & Size Profile using sample data.${
+            status.planners.claude.credentials ? ' Switch to Claude to ask anything.' : ' Add an Anthropic API key to ask open-ended MCP questions.'
           }`
         : 'Claude plans which MCP tools to call, cites every record it reads, and holds changes for your OK.';
 
+  const inspectedResult = inspectedProduct ? recommendSize(sizeProfile, inspectedProduct) : null;
+
   return (
     <>
-      <a className="skip" href="#q">Skip to the question box</a>
+      <a className="skip" href="#main">Skip to content</a>
 
       <AppTopBar
         status={status}
         busy={busy}
         offline={offline}
+        reminderCount={activeReminderCount}
         onSetMode={handleSetMode}
         onReset={handleReset}
       />
 
-      <div className="workspace">
-        <main className="main" id="main">
-          <section className="ask" aria-labelledby="greeting">
-            <h1 className="greeting" id="greeting">{greeting}</h1>
-            <p className="ask-sub">{askSub}</p>
-            <form
-              className="composer"
-              autoComplete="off"
-              onSubmit={(e) => {
-                e.preventDefault();
-                ask(questionText);
-              }}
-            >
-              <label className="visually-hidden" htmlFor="q">Your question</label>
-              <textarea
-                ref={textareaRef}
-                id="q"
-                name="q"
-                rows={2}
-                maxLength={600}
-                placeholder="Ask about your day, your plans or your spending"
-                value={questionText}
-                disabled={busy || offline || !status}
-                onChange={(e) => {
-                  setQuestionText(e.target.value);
-                  autosize();
+      {view === 'wishlist' ? (
+        <main className="wl-shell" id="main">
+          <WishlistView
+            wishlist={wishlist}
+            sizeProfile={sizeProfile}
+            occasions={occasions}
+            reminderPrefs={reminderPrefs}
+            onAdd={addItem}
+            onUpdate={updateItem}
+            onRemove={removeItem}
+            onDismissReminder={dismissReminder}
+            onGoToProfile={() => navigate('/app/size-profile')}
+          />
+        </main>
+      ) : view === 'size-profile' ? (
+        <main className="wl-shell" id="main">
+          <SizeProfileView
+            sizeProfile={sizeProfile}
+            wishlist={wishlist}
+            occasions={occasions}
+            reminderPrefs={reminderPrefs}
+            onSaveProfile={saveProfile}
+            onClearProfile={clearProfileMeasurements}
+            onUpdateReminderPrefs={updateReminderPrefs}
+            onAddOccasion={addOccasionEvent}
+            onOpenWishlist={() => navigate('/app/wishlist')}
+          />
+        </main>
+      ) : (
+        <div className="workspace">
+          <main className="main" id="main">
+            <section className="ask" aria-labelledby="greeting">
+              <h1 className="greeting" id="greeting">{greeting}</h1>
+              <p className="ask-sub">{askSub}</p>
+              <form
+                className="composer"
+                autoComplete="off"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  ask(questionText);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    ask(questionText);
-                  }
-                }}
-              />
-              <div className="composer-foot">
-                <span className="composer-hint">
-                  <kbd>Enter</kbd> to ask, <kbd>Shift</kbd>&nbsp;+&nbsp;<kbd>Enter</kbd> for a new line
-                </span>
-                <button className="btn btn-primary" type="submit" disabled={busy || offline || !status}>
-                  {busy ? (
-                    <>
-                      <span className="spinner" aria-hidden="true" />
-                      <span>Asking</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Ask</span>
-                      <Icon name="i-enter" />
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+              >
+                <label className="visually-hidden" htmlFor="q">Your question</label>
+                <textarea
+                  ref={textareaRef}
+                  id="q"
+                  name="q"
+                  rows={2}
+                  maxLength={600}
+                  placeholder="Ask about your day, your wishlist outfits, sizing or spending"
+                  value={questionText}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setQuestionText(e.target.value);
+                    autosize();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      ask(questionText);
+                    }
+                  }}
+                />
+                <div className="composer-foot">
+                  <span className="composer-hint">
+                    <kbd>Enter</kbd> to ask, <kbd>Shift</kbd>&nbsp;+&nbsp;<kbd>Enter</kbd> for a new line
+                  </span>
+                  <button className="btn btn-primary" type="submit" disabled={busy}>
+                    {busy ? (
+                      <>
+                        <span className="spinner" aria-hidden="true" />
+                        <span>Asking</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Ask</span>
+                        <Icon name="i-enter" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
 
-            <div className="suggest" aria-label="Example questions">
-              {!offline &&
-                (status?.suggestions ?? []).map((q) => (
+              <div className="suggest" aria-label="Example questions">
+                {!offline &&
+                  (status?.suggestions ?? []).map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      disabled={busy}
+                      title={q}
+                      aria-label={`Ask: ${q}`}
+                      onClick={() => {
+                        setQuestionText(q);
+                        requestAnimationFrame(autosize);
+                        ask(q);
+                      }}
+                    >
+                      {SHORT[q] ?? q}
+                    </button>
+                  ))}
+                {WISHLIST_PROMPTS.map((q) => (
                   <button
                     key={q}
                     type="button"
+                    className="is-wishlist"
                     disabled={busy}
                     title={q}
                     aria-label={`Ask: ${q}`}
@@ -380,50 +526,63 @@ export function WorkspacePage() {
                       ask(q);
                     }}
                   >
-                    {SHORT[q] ?? q}
+                    {q}
                   </button>
                 ))}
-            </div>
-
-            {offline && (
-              <div className="notice" role="alert">
-                <Icon name="i-alert" />
-                <div>
-                  <strong>Can&apos;t reach the Weave server.</strong>
-                  <p>Start it from the project folder with npm start, then try again.</p>
-                  <button className="btn btn-quiet btn-sm" type="button" onClick={loadStatus}>
-                    Try again
-                  </button>
-                </div>
               </div>
-            )}
-          </section>
 
-          <RunView
-            ref={runRef}
-            run={run}
+              {offline && (
+                <div className="notice" role="alert">
+                  <Icon name="i-alert" />
+                  <div>
+                    <strong>MCP backend is offline — Wishlist &amp; Size Q&amp;A is still active.</strong>
+                    <p>Start the Node server with npm start to also connect Calendar, Notes, Tasks and Money MCP servers.</p>
+                    <button className="btn btn-quiet btn-sm" type="button" onClick={loadStatus}>
+                      Try again
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <RunView
+              ref={runRef}
+              run={run}
+              busy={busy}
+              litN={litN}
+              onLight={light}
+              onOpenSource={openSource}
+              onApprove={handleApprove}
+              onDismiss={handleDismiss}
+              onInspectSize={(item) => setInspectedProduct(item)}
+              onOpenWishlist={() => navigate('/app/wishlist')}
+            />
+          </main>
+
+          <InspectorPanel
+            tab={tab}
+            onSelectTab={selectTab}
+            status={status}
+            offline={offline}
             busy={busy}
+            run={run}
+            activity={activity}
             litN={litN}
-            onLight={light}
-            onOpenSource={openSource}
-            onApprove={handleApprove}
-            onDismiss={handleDismiss}
+            sourceRefs={sourceRefs}
+            onToggleApp={handleToggleApp}
           />
-        </main>
+        </div>
+      )}
 
-        <InspectorPanel
-          tab={tab}
-          onSelectTab={selectTab}
-          status={status}
-          offline={offline}
-          busy={busy}
-          run={run}
-          activity={activity}
-          litN={litN}
-          sourceRefs={sourceRefs}
-          onToggleApp={handleToggleApp}
+      {inspectedProduct && (
+        <SizeIntelligenceModal
+          product={inspectedProduct}
+          result={inspectedResult}
+          unit={sizeProfile.unit}
+          onClose={() => setInspectedProduct(null)}
+          onGoToProfile={() => navigate('/app/size-profile')}
         />
-      </div>
+      )}
 
       <div className={`toast${toastOn ? ' is-on' : ''}`} role="status" aria-live="polite">
         {toastMsg}

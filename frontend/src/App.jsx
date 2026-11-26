@@ -32,6 +32,7 @@ export function App() {
         <Route path="/developers" element={<DevelopersPage />} />
         <Route path="/developers.html" element={<DevelopersPage />} />
         <Route path="/app" element={<WorkspacePage />} />
+        <Route path="/app/*" element={<WorkspacePage />} />
         <Route path="/app.html" element={<WorkspacePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

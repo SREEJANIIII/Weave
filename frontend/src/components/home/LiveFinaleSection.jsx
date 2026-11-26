@@ -124,7 +124,7 @@ export const LiveFinaleSection = forwardRef(function LiveFinaleSection(_, ref) {
       css.getPropertyValue(v).trim(),
     );
     const WEFT = css.getPropertyValue('--color-on-night').trim();
-    const YARN_INDEX = { calendar: 0, notes: 1, tasks: 2, money: 3, workout: 3, email: 4 };
+    const YARN_INDEX = { calendar: 0, notes: 1, tasks: 2, money: 3, workout: 3, email: 4, wishlist: 4 };
     const glow = new Float32Array(5);
     const pulses = [];
     let W = 0;

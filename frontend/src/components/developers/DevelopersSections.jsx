@@ -299,7 +299,7 @@ export function ClosingWeaveSection() {
           role="img"
           aria-labelledby="closing-weave-title"
         >
-          <title id="closing-weave-title">Five app threads running into the Weave symbol</title>
+          <title id="closing-weave-title">Connected app threads running into the Weave symbol</title>
           <g fill="none" strokeLinecap="round">
             <path className="cw cw-calendar" pathLength="1" d="M0,60 C150,60 220,210 326,210" />
             <path className="cw cw-notes" pathLength="1" d="M0,140 C140,140 220,216 326,216" />

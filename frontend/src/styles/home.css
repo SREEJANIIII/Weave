@@ -33,6 +33,7 @@ html[data-page="home"] [data-yarn="notes"] { --yarn: var(--yarn-notes); --yarn-l
 html[data-page="home"] [data-yarn="tasks"] { --yarn: var(--yarn-tasks); --yarn-line: var(--yarn-tasks); }
 html[data-page="home"] [data-yarn="money"],  html[data-page="home"] [data-yarn="workout"] { --yarn: var(--yarn-workout); --yarn-line: var(--yarn-workout); }
 html[data-page="home"] [data-yarn="email"] { --yarn: var(--yarn-email); --yarn-line: var(--yarn-email-deep); }
+html[data-page="home"] [data-yarn="wishlist"] { --yarn: var(--yarn-wishlist); --yarn-line: var(--yarn-wishlist-deep); }
 html[data-page="home"] [data-yarn="home"],  html[data-page="home"] [data-yarn="travel"] { --yarn: var(--color-rule-strong); --yarn-line: var(--color-edge); }
 /* A small woven swatch in the app's yarn */
 html[data-page="home"] .weave-swatch,  html[data-page="home"] .yarns span,  html[data-page="home"] .uv-list li::before,  html[data-page="home"] .screen-list li::before,  html[data-page="home"] .apps-used span::before {
@@ -98,13 +99,14 @@ html[data-page="home"] .uv-tangle path.ink { stroke: var(--color-ink); stroke-wi
 html[data-page="home"] .uv-strands path { fill: none; stroke: var(--yarn-line); stroke-width: 3; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 html[data-page="home"] .uv-q { position: absolute; top: 8cqh; right: 0; width: 72cqw; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-card) var(--radius-card) var(--space-2xs) var(--radius-card); background: var(--color-ink); color: var(--color-paper); line-height: 1.4; z-index: var(--z-raised); }
 
-html[data-page="home"] .uv-card { position: absolute; left: 0; top: 0; width: 31cqw; z-index: var(--z-raised); transform: translate(calc(var(--x1) * 1cqw), calc(var(--y1) * 1cqh)); }
-html[data-page="home"] .uv-card[data-app="calendar"] { --x0: 3; --y0: 10; --r0: -7; --rx0: 22; --ry0: -18; --x1: 0; --y1: 20; }
-html[data-page="home"] .uv-card[data-app="notes"] { --x0: 56; --y0: 7; --r0: 6; --rx0: 18; --ry0: 20; --x1: 34.5; --y1: 20; }
-html[data-page="home"] .uv-card[data-app="tasks"] { --x0: 30; --y0: 30; --r0: -3; --rx0: -14; --ry0: 10; --x1: 69; --y1: 20; }
-html[data-page="home"] .uv-card[data-app="email"] { --x0: 66; --y0: 38; --r0: 8; --rx0: 16; --ry0: 24; --x1: 0; --y1: 31; }
-html[data-page="home"] .uv-card[data-app="money"] { --x0: 2; --y0: 54; --r0: 5; --rx0: -20; --ry0: -16; --x1: 34.5; --y1: 31; }
-html[data-page="home"] .uv-card[data-app="workout"] { --x0: 44; --y0: 64; --r0: -6; --rx0: -24; --ry0: 14; --x1: 69; --y1: 31; }
+html[data-page="home"] .uv-card { position: absolute; left: 0; top: 0; width: 23.5cqw; z-index: var(--z-raised); transform: translate(calc(var(--x1) * 1cqw), calc(var(--y1) * 1cqh)); }
+html[data-page="home"] .uv-card[data-app="calendar"] { --x0: 2; --y0: 10; --r0: -7; --rx0: 22; --ry0: -18; --x1: 0; --y1: 19; }
+html[data-page="home"] .uv-card[data-app="notes"] { --x0: 46; --y0: 6; --r0: 5; --rx0: 18; --ry0: 20; --x1: 25.5; --y1: 19; }
+html[data-page="home"] .uv-card[data-app="tasks"] { --x0: 25; --y0: 29; --r0: -3; --rx0: -14; --ry0: 10; --x1: 51; --y1: 19; }
+html[data-page="home"] .uv-card[data-app="wishlist"] { --x0: 74; --y0: 19; --r0: 6; --rx0: 14; --ry0: -16; --x1: 76.5; --y1: 19; }
+html[data-page="home"] .uv-card[data-app="email"] { --x0: 68; --y0: 45; --r0: 8; --rx0: 16; --ry0: 24; --x1: 12.75; --y1: 31; }
+html[data-page="home"] .uv-card[data-app="money"] { --x0: 2; --y0: 55; --r0: 5; --rx0: -20; --ry0: -16; --x1: 38.25; --y1: 31; }
+html[data-page="home"] .uv-card[data-app="workout"] { --x0: 42; --y0: 66; --r0: -6; --rx0: -24; --ry0: 14; --x1: 63.75; --y1: 31; }
 html[data-page="home"] .uv-in { position: relative; display: grid; gap: var(--space-3xs); padding: var(--space-xs) var(--space-sm); background: var(--color-paper-3); border: 1px solid var(--color-edge); border-radius: var(--radius-inner); box-shadow: var(--shadow-card); translate: var(--px, 0px) var(--py, 0px); }
 html[data-page="home"] .uv-name { display: inline-flex; align-items: center; gap: var(--space-xs); font-weight: 600; font-size: var(--text-sm); }
 html[data-page="home"] .uv-name .icon { color: var(--yarn-line); }
@@ -132,7 +134,20 @@ html[data-page="home"] .uv-ask { display: flex; align-items: center; justify-con
   html[data-page="home"] .uv-stage { height: 660px; }
   html[data-page="home"] .uv-head { font-size: var(--text-lg); }
 }
-@media (max-width: 40rem) { html[data-page="home"] .uv-stage { height: 720px; } html[data-page="home"] .uv-q { width: 100cqw; } html[data-page="home"] .uv-name { font-size: var(--text-xs); } html[data-page="home"] .uv-answer { padding: var(--space-md); } }
+@media (max-width: 40rem) {
+  html[data-page="home"] .uv-stage { height: 760px; }
+  html[data-page="home"] .uv-q { width: 100cqw; }
+  html[data-page="home"] .uv-card { width: 31cqw; }
+  html[data-page="home"] .uv-card[data-app="calendar"] { --x1: 0; --y1: 18; }
+  html[data-page="home"] .uv-card[data-app="notes"] { --x1: 34.5; --y1: 18; }
+  html[data-page="home"] .uv-card[data-app="tasks"] { --x1: 69; --y1: 18; }
+  html[data-page="home"] .uv-card[data-app="wishlist"] { --x1: 0; --y1: 28; }
+  html[data-page="home"] .uv-card[data-app="email"] { --x1: 34.5; --y1: 28; }
+  html[data-page="home"] .uv-card[data-app="money"] { --x1: 69; --y1: 28; }
+  html[data-page="home"] .uv-card[data-app="workout"] { --x1: 34.5; --y1: 38; }
+  html[data-page="home"] .uv-answer { top: 50cqh; padding: var(--space-md); }
+  html[data-page="home"] .uv-name { font-size: var(--text-xs); }
+}
 
 /* Page load: the cards drop in once. */
 @media (prefers-reduced-motion: no-preference) {
@@ -142,6 +157,7 @@ html[data-page="home"] .uv-ask { display: flex; align-items: center; justify-con
   html[data-page="home"].js .uv-card:nth-of-type(4) .uv-in { animation-delay: calc(var(--intro-wait, 0ms) + 180ms); }
   html[data-page="home"].js .uv-card:nth-of-type(5) .uv-in { animation-delay: calc(var(--intro-wait, 0ms) + 240ms); }
   html[data-page="home"].js .uv-card:nth-of-type(6) .uv-in { animation-delay: calc(var(--intro-wait, 0ms) + 300ms); }
+  html[data-page="home"].js .uv-card:nth-of-type(7) .uv-in { animation-delay: calc(var(--intro-wait, 0ms) + 360ms); }
 }
 @keyframes drop-in { from { opacity: 0; scale: 0.8; } }
 

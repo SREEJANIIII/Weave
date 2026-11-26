@@ -3,6 +3,7 @@ import { Icon } from '../Icons';
 
 const ITEMS = [
   { area: 'work', yarn: 'notes', label: 'What did I promise yesterday?' },
+  { area: 'wishlist', yarn: 'wishlist', label: 'What outfits did I save for Diwali?' },
   { area: 'week', yarn: 'calendar', label: 'When can I fit in a workout?' },
   { area: 'money', yarn: 'money', label: 'What did food cost last week?' },
   { area: 'email', yarn: 'email', label: 'Who’s waiting for a reply?' },
