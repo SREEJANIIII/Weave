@@ -405,8 +405,8 @@ export const RunView = React.forwardRef(function RunView(
           )}
           <p className="stats">
             {`${plural(run.answer.stats.reads, 'MCP read')} in ${run.answer.stats.ms} ms. Planner: ${
-              run.answer.stats.mode === 'claude'
-                ? `Claude (${run.answer.stats.model})`
+              run.answer.stats.mode === 'nvidia'
+                ? `NVIDIA (${run.answer.stats.model})`
                 : run.answer.stats.mode === 'local-wishlist'
                   ? 'local Wishlist & Size Intelligence (sample data)'
                   : 'offline script'

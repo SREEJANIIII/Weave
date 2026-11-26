@@ -3,7 +3,7 @@
 Weave answers one everyday question across the apps you use, shows the exact records behind every point, and drafts changes that only happen after you approve them. This is the wHACKiest 2026 prototype (Track 1: Make MCP Matter).
 
 ```
-Ask ──▶ Weave app ──▶ planner (Claude, or the offline script)
+Ask ──▶ Weave app ──▶ planner (NVIDIA, or the offline script)
                           │  picks tools
                           ▼
                      MCP client ──tools/list, tools/call──▶ MCP servers: Calendar · Notes · Tasks · Money
@@ -66,7 +66,7 @@ Run `npm run dev` from the repo root for instant React HMR while talking to the 
 ### Planners
 
 - **Offline planner** (default when no key is found): a fixed script for the demo questions plus deterministic wishlist, occasion, and size-matching demonstrations. It makes the same real MCP calls and follows the same rules.
-- **Claude planner**: set a key, restart, and pick *Claude* in the top bar. Claude chooses which MCP tools to call and writes the cited answer.
+- **NVIDIA planner**: set `NVIDIA_API_KEY`, restart, and pick *NVIDIA* in the top bar. NVIDIA's OpenAI-compatible API chooses which MCP tools to call and writes the cited answer.
 
 Still in `backend/`:
 
@@ -103,7 +103,7 @@ npm run smoke
 | Approval gate | **Real.** Any tool not marked `readOnlyHint: true` is held as a draft; it runs only after you approve, then Weave reads the record back before saying "Done". |
 | Wishlist and size intelligence | **Implemented with MongoDB Atlas persistence and synthetic charts.** Wishlist CRUD, occasion tags, a clearly labelled sample profile, deterministic brand/category charts, unit conversion, missing-measurement and between-size handling are available through the Wishlist & sizes MCP server. |
 | Occasion-aware reminders | **Implemented as a read-and-suggest workflow.** Upcoming records from Calendar are matched to wishlist occasion tags in configurable 30/14/7-day windows. Creating a Task or Calendar reminder remains approval-gated. Festival dates are not hardcoded. |
-| Claude planner | Built on the Anthropic SDK's tool runner with `claude-opus-5-5`. **Not tested against the live API on this machine** (no key was available). The offline path is fully tested. |
+| NVIDIA planner | Built on the official OpenAI JavaScript SDK against NVIDIA's OpenAI-compatible endpoint. Default model: `openai/gpt-oss-20b`; override with `NVIDIA_MODEL`. |
 | Email, fitness apps, travel, learning, home | **Planned.** Shown as planned in the app and not connected. |
 
 ## Demo script (about 2 minutes)
@@ -124,7 +124,7 @@ npm run smoke
 | `backend/mcp-servers/*.js` | Five MCP servers (`McpServer` + stdio). Tools carry MCP annotations: reads are `readOnlyHint: true`; wishlist/profile mutations, `create_task`, and `create_event` are not. |
 | `backend/src/hub.js` | Weave's MCP client. Spawns each server, discovers tools, calls them, and logs every message for the activity panel. |
 | `backend/src/run.js` | One question = one run. Reads register citable sources, writes become drafts, and the answer may only cite records that were actually read. |
-| `backend/src/agent-claude.js` | Claude planner: each MCP tool becomes a tool for the SDK's tool runner; write tools only create drafts. The final answer comes back through a strict `present_answer` tool. |
+| `backend/src/agent-nvidia.js` | NVIDIA planner: each MCP tool becomes an OpenAI function declaration; write functions only create drafts. The final answer comes back through `present_answer`. |
 | `backend/src/agent-offline.js` | Offline planner for the core demo questions plus deterministic wishlist/occasion/size workflows. |
 | `backend/src/server.js` | Entry point (127.0.0.1 only): connects to MongoDB, starts the MCP apps, then starts the Express server with `app.listen()` and handles graceful shutdown. |
 | `backend/src/app.js` | Express app: `express.json()` (64 KB) and CORS middleware, the same-origin guard, static UI with SPA fallback, and a JSON error handler. |
@@ -153,10 +153,9 @@ Reminder reconciliation uses a unique `(wishlist_item_id, calendar_event_id, rem
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Enables the Claude planner (an `ant auth login` profile also works). |
-| `WEAVE_MODE` | `claude` if a key is found, else `offline` | Starting planner. |
-| `WEAVE_MODEL` | `claude-opus-5-5` | Model for the Claude planner. |
-| `WEAVE_EFFORT` | `medium` | `low`, `medium`, `high`, `xhigh` or `max`. |
+| `NVIDIA_API_KEY` | none | Enables the NVIDIA planner. |
+| `NVIDIA_MODEL` | `openai/gpt-oss-20b` | NVIDIA NIM model used for function calling. This model is listed in NVIDIA's hosted API catalog as supporting function calling. |
+| `WEAVE_MODE` | `nvidia` if a key is found, else `offline` | Starting planner (`nvidia` or `offline`). |
 | `WEAVE_TODAY` | today | Pin "today" (YYYY-MM-DD) for a repeatable demo. |
 | `WEAVE_STATEMENT_CSV` | `data/statement.csv` (relative to `backend/`) | Statement file for the Money server. |
 | `MONGODB_URI` | none | Required MongoDB Atlas connection string. |
@@ -164,7 +163,11 @@ Reminder reconciliation uses a unique `(wishlist_item_id, calendar_event_id, rem
 | `WEAVE_PROFILE_ENCRYPTION_KEY` | none | Optional base64-encoded 32-byte AES-256-GCM key for size-profile encryption. |
 | `PORT` | `4321` | Server port. |
 
-Claude requests use server-side refusal fallbacks (`fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta), so if the model declines, the API retries on a fallback model. Remove those two fields in `backend/src/agent-claude.js` to turn this off.
+NVIDIA requests use the official OpenAI JavaScript SDK with base URL `https://integrate.api.nvidia.com/v1`, a 30-second timeout, and one SDK retry. API keys are read server-side only and are never included in status responses, activity logs, or frontend payloads.
+
+### NVIDIA setup
+
+Create an NVIDIA API key from the [NVIDIA hosted API catalog](https://build.nvidia.com/openai/gpt-oss-20b?nim=hosted), copy `backend/.env.example` to `backend/.env`, and set `NVIDIA_API_KEY`. The default `openai/gpt-oss-20b` model is documented in NVIDIA's catalog as supporting function calling; set `NVIDIA_MODEL` to another catalog model available to your key if needed. Restart Weave after changing the environment.
 
 ### MongoDB Atlas setup
 

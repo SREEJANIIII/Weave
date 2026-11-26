@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { PLANNED } from '../hub.js';
 import { Run } from '../run.js';
 import { runOffline, DEMO_QUESTIONS } from '../agent-offline.js';
-import { runClaude, explainError, hasCredentials, MODEL, EFFORT } from '../agent-claude.js';
+import { runNvidia, explainError, hasCredentials, MODEL } from '../agent-nvidia.js';
 import { now, isoDate, fmtLongDate } from '../../lib/dates.js';
 
 // Fields a person may edit on a draft before approving it.
@@ -22,7 +22,7 @@ export function statusPayload({ hub, state }) {
     hour: T.getHours(),
     mode: state.mode,
     planners: {
-      claude: { model: MODEL, effort: EFFORT, credentials: hasCredentials() },
+      nvidia: { model: MODEL, credentials: hasCredentials() },
       offline: { questions: DEMO_QUESTIONS },
     },
     apps: hub.status(),
@@ -84,10 +84,10 @@ export function createApiRouter({ hub, proposals, state }) {
       if (!res.writableEnded && !res.destroyed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
     const mode = state.mode;
-    const run = new Run({ hub, proposals, question: q, mode, model: mode === 'claude' ? MODEL : null, emit: send });
+    const run = new Run({ hub, proposals, question: q, mode, model: mode === 'nvidia' ? MODEL : null, emit: send });
     send('run', { id: run.id, mode, model: run.model, question: q });
     try {
-      if (mode === 'claude') await runClaude(run);
+      if (mode === 'nvidia') await runNvidia(run);
       else await runOffline(run);
     } catch (err) {
       console.error('[ask]', err);
@@ -118,7 +118,7 @@ export function createApiRouter({ hub, proposals, state }) {
 
   router.post('/mode', (req, res) => {
     const { mode } = req.body ?? {};
-    if (!['claude', 'offline'].includes(mode)) return res.status(400).json({ error: 'Unknown planner.' });
+    if (!['nvidia', 'offline'].includes(mode)) return res.status(400).json({ error: 'Unknown planner.' });
     state.mode = mode;
     res.json(statusPayload({ hub, state }));
   });

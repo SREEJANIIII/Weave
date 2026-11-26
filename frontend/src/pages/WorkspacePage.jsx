@@ -392,9 +392,9 @@ export function WorkspacePage() {
       ? 'Weave reads only what a question needs, cites every record, and holds changes for your\u00a0OK.'
       : status.mode === 'offline'
         ? `Ask about your day or your Smart Wishlist & Size Profile using sample data.${
-            status.planners.claude.credentials ? ' Switch to Claude to ask anything.' : ' Add an Anthropic API key to ask open-ended MCP questions.'
+            status.planners.nvidia.credentials ? ' Switch to NVIDIA to ask anything.' : ' Add a NVIDIA API key to ask open-ended MCP questions.'
           }`
-        : 'Claude plans which MCP tools to call, cites every record it reads, and holds changes for your OK.';
+        : 'NVIDIA plans which MCP tools to call, cites every record it reads, and holds changes for your OK.';
 
   const inspectedResult = inspectedProduct ? recommendSize(sizeProfile, inspectedProduct) : null;
 

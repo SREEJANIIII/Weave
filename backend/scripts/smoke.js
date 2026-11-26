@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 4399;
 const base = `http://127.0.0.1:${PORT}`;
-const server = spawn(process.execPath, ['src/server.js'], { cwd: root, env: { ...process.env, PORT: String(PORT), WEAVE_MODE: 'offline' }, stdio: ['ignore', 'pipe', 'inherit'] });
+const server = spawn(process.execPath, ['--env-file-if-exists=.env', 'src/server.js'], { cwd: root, env: { ...process.env, PORT: String(PORT), WEAVE_MODE: 'offline' }, stdio: ['ignore', 'pipe', 'inherit'] });
 
 async function waitForServer() {
   for (let i = 0; i < 50; i += 1) {

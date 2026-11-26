@@ -1,4 +1,4 @@
-// One question = one Run. Both planners (Claude and offline) work through this object, so the
+// One question = one Run. Both planners (NVIDIA and offline) work through this object, so the
 // rules are enforced in one place:
 //   - reads go through MCP and every record they return becomes a citable source;
 //   - writes are never executed here, only drafted as proposals for the user to approve;

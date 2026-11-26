@@ -10,12 +10,12 @@ export function AppTopBar({ status, busy, offline, reminderCount = 0, onSetMode,
   const options = status
     ? [
         {
-          id: 'claude',
-          label: 'Claude',
-          disabled: !status.planners.claude.credentials,
-          title: !status.planners.claude.credentials
-            ? 'No Anthropic API key found. Set ANTHROPIC_API_KEY and restart the server.'
-            : 'Plan with Claude',
+          id: 'nvidia',
+          label: 'NVIDIA',
+          disabled: !status.planners.nvidia.credentials,
+          title: !status.planners.nvidia.credentials
+            ? 'No NVIDIA API key found. Set NVIDIA_API_KEY and restart the server.'
+            : 'Plan with NVIDIA',
         },
         {
           id: 'offline',

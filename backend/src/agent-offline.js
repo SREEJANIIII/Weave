@@ -1,5 +1,5 @@
 // Offline planner: a fixed, scripted plan for the two demo questions. It makes the same real MCP
-// calls as the Claude planner and follows the same rules (cite what you read, draft changes, never
+// calls as the NVIDIA planner and follows the same rules (cite what you read, draft changes, never
 // run them), but the reasoning is hand-written, so it only understands these two questions.
 import { now, isoDate, lastWeek, fmtRange, fmtTime, fmtDay, fmtMoney, fmtRelative, shortWeekday, toMinutes, fromMinutes, addDays } from '../lib/dates.js';
 
@@ -59,7 +59,7 @@ export async function runOffline(run) {
   return run.finish({
     headline: 'Offline mode can only answer the two demo questions.',
     sections: [{ title: 'Try one of these', items: DEMO_QUESTIONS.map((text) => ({ text, detail: '', source_ids: [] })) }],
-    caveats: ['Switch the planner to Claude (top right) to ask anything across your connected apps.'],
+    caveats: ['Switch the planner to NVIDIA (top right) to ask anything across your connected apps.'],
   });
 }
 
