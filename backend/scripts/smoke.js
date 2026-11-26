@@ -42,9 +42,16 @@ const ok = (label) => console.log(`  ✓ ${label}`);
 try {
   const status = await waitForServer();
   assert.equal(status.apps.filter((a) => a.status === 'connected').length, 6, 'six MCP apps connected');
-  assert.equal(status.apps.flatMap((a) => a.tools).length, 40, 'forty tools discovered');
-  assert.deepEqual(status.apps.flatMap((a) => a.tools.filter((t) => !t.readOnly).map((t) => t.name)).sort(), ['confirm_appliance_document', 'create_appliance_reminder', 'create_event', 'create_task', 'delete_size_profile', 'delete_wishlist_item', 'dismiss_reminder', 'reconcile_appliance_reminders', 'reconcile_reminders', 'save_appliance', 'save_wishlist_item', 'update_appliance', 'update_appliance_deadline', 'update_appliance_reminder', 'update_size_profile', 'update_wishlist_item']);
-  ok('6 MCP servers connected, 40 tools, 16 marked as changing data');
+  const applianceApp = status.apps.find((a) => a.id === 'appliances');
+  assert.equal(applianceApp?.name, 'Appliances & Bills', 'Appliances is registered in the MCP status payload');
+  assert.ok(applianceApp?.tools.length > 0, 'Appliances tools are exposed to the Apps panel');
+  const applianceOff = await post('/api/apps/appliances', { enabled: false });
+  assert.equal(applianceOff.apps.find((a) => a.id === 'appliances')?.enabled, false, 'Appliances toggle disables the MCP server');
+  const applianceOn = await post('/api/apps/appliances', { enabled: true });
+  assert.equal(applianceOn.apps.find((a) => a.id === 'appliances')?.enabled, true, 'Appliances toggle re-enables the MCP server');
+  assert.equal(status.apps.flatMap((a) => a.tools).length, 41, 'forty-one tools discovered');
+  assert.deepEqual(status.apps.flatMap((a) => a.tools.filter((t) => !t.readOnly).map((t) => t.name)).sort(), ['confirm_appliance_document', 'create_appliance_reminder', 'create_event', 'create_task', 'delete_appliance_document', 'delete_size_profile', 'delete_wishlist_item', 'dismiss_reminder', 'reconcile_appliance_reminders', 'reconcile_reminders', 'save_appliance', 'save_wishlist_item', 'update_appliance', 'update_appliance_deadline', 'update_appliance_reminder', 'update_size_profile', 'update_wishlist_item']);
+  ok('6 MCP servers connected, 41 tools, 17 marked as changing data');
 
   // Question 1
   const q1 = await ask(status.suggestions[0]);

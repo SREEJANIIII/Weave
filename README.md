@@ -113,7 +113,7 @@ npm --prefix backend run test:appliances
 | Calendar, Notes, Tasks, Money, and Wishlist & sizes servers | **Real MCP servers, sample data.** The data is generated relative to today so the demo works on any day. Nothing connects to a real account or shopping platform. |
 | Money | Reads `backend/data/statement.csv` if you add one (format in `backend/data/statement.example.csv`); otherwise a sample statement. Never connects to a bank or UPI app. |
 | Approval gate | **Real.** Any tool not marked `readOnlyHint: true` is held as a draft; it runs only after you approve, then Weave reads the record back before saying "Done". |
-| Wishlist and size intelligence | **Implemented with MongoDB Atlas persistence and synthetic charts.** Wishlist CRUD, occasion tags, a clearly labelled sample profile, deterministic brand/category charts, unit conversion, missing-measurement and between-size handling are available through the Wishlist & sizes MCP server. |
+| Wishlist and size intelligence | **Implemented with MongoDB persistence and synthetic charts.** Wishlist CRUD, occasion tags, a clearly labelled sample profile, deterministic brand/category charts, unit conversion, missing-measurement and between-size handling are available through the Wishlist & sizes MCP server. |
 | Occasion-aware reminders | **Implemented as a read-and-suggest workflow.** Upcoming records from Calendar are matched to wishlist occasion tags in configurable 30/14/7-day windows. Creating a Task or Calendar reminder remains approval-gated. Festival dates are not hardcoded. |
 | Appliances & Bills | **Implemented.** PDF/JPG/JPEG/PNG uploads, PDF text extraction, local OCR, vision reading for handwriting, a review screen, deduplicated appliances, confirmed deadlines, recurring EMIs and configurable reminders. Documents are stored privately; unconfirmed values never become active reminders. |
 | NVIDIA planner | Built on the official OpenAI JavaScript SDK against NVIDIA's OpenAI-compatible endpoint. Default model: `openai/gpt-oss-20b`; override with `NVIDIA_MODEL`. Document images use `NVIDIA_VISION_MODEL` and are only sent after image support is verified. |
@@ -121,7 +121,7 @@ npm --prefix backend run test:appliances
 
 ## Demo script (about 2 minutes)
 
-1. Point at the left rail: five MCP servers, the tools each one exposes, and which ones *ask first*.
+1. Point at the left rail: six MCP servers, the tools each one exposes, and which ones *ask first*.
 2. Ask *"What should I follow up on today, and when can I fit in a workout?"* and watch the MCP calls stream in.
 3. Hover a citation number: the matching record lights up on the right.
 4. Open **Edit** on the run, move it to 6:30, then **Approve**. The card says it was added and read back from the calendar. Open **MCP activity** to show the held write, the approval and the read-back.
@@ -169,13 +169,13 @@ The sixth MCP server (`backend/mcp-servers/appliances.js`) exposes 14 tools: sea
 
 **Questions.** Both planners can answer "Which warranties expire soon?", "When is my next AC service?", "How much EMI is due this month?", "Can I still return my washing machine?" and "Which AMCs need renewal?" from MCP records, with source citations and approval-gated writes. Answers only use confirmed data and say so explicitly.
 
-### MongoDB Atlas persistence and privacy
+### MongoDB persistence and privacy
 
-Wishlist items, the size profile, and reminder records are stored in MongoDB Atlas through the centralized Mongoose connection in `backend/db/database.js`, models under `backend/models/`, and repositories under `backend/repositories/`. The database name is controlled by `MONGODB_DB_NAME` or the URI. Weave creates indexes through Mongoose; repeated startup is safe. There is no local or in-memory fallback.
+Wishlist items, the size profile, reminders and appliance records are stored in MongoDB through the centralized Mongoose connection in `backend/db/database.js`, models under `backend/models/`, and repositories under `backend/repositories/`. Use local MongoDB (`mongodb://127.0.0.1:27017/weave`) for development or Atlas for hosted storage. The database name is controlled by `MONGODB_DB_NAME` or the URI. Weave creates indexes through Mongoose; repeated startup is safe. There is no in-memory fallback.
 
 Demonstration wishlist/profile documents are inserted only when their collections are empty. Existing user data is never overwritten on startup. The `/api/reset` demo action does not delete persistent data. The size-profile delete tool marks the profile deleted and clears its payload so it is not automatically reseeded. For a development reset, stop Weave and explicitly drop the configured test database or delete its collections; never run that against a user database.
 
-Size profiles are single-user data in this prototype; there is no account authentication or multi-user isolation. Atlas encryption is not treated as application-level field encryption. For application-level encryption, set `WEAVE_PROFILE_ENCRYPTION_KEY` to a base64-encoded 32-byte key. AES-256-GCM is used with a fresh IV per update. If an encrypted profile exists without the key, reads fail safely rather than returning data. Do not commit keys, `.env`, or real data.
+Size profiles are single-user data in this prototype; there is no account authentication or multi-user isolation. `WEAVE_PROFILE_ENCRYPTION_KEY` is mandatory: it must be canonical base64 for exactly 32 bytes. AES-256-GCM is used with a fresh IV per update; startup fails rather than storing measurements in plaintext. If a legacy plaintext profile exists, reads fail safely and it must be migrated or removed explicitly. Do not commit keys, `.env`, or real data.
 
 Reminder reconciliation uses a unique `(wishlist_item_id, calendar_event_id, reminder_window)` constraint. It updates event dates for active reminders, preserves dismissed/completed/cancelled states, removes reminders for archived/deleted items and past events, and supports 30-, 14-, and 7-day windows. This is on-demand reconciliation when Weave is asked; background notifications and schedulers are not implemented.
 
@@ -197,7 +197,7 @@ Reminder reconciliation uses a unique `(wishlist_item_id, calendar_event_id, rem
 | `WEAVE_STATEMENT_CSV` | `data/statement.csv` (relative to `backend/`) | Statement file for the Money server. |
 | `MONGODB_URI` | none | Required MongoDB connection string (`mongodb://127.0.0.1:27017/weave` for local Compass or Atlas URI). |
 | `MONGODB_DB_NAME` | URI-selected database | Optional database name passed to Mongoose. |
-| `WEAVE_PROFILE_ENCRYPTION_KEY` | none | Optional base64-encoded 32-byte AES-256-GCM key for size-profile encryption. |
+| `WEAVE_PROFILE_ENCRYPTION_KEY` | none | Required base64-encoded 32-byte AES-256-GCM key for size-profile encryption. |
 | `PORT` | `4321` | Server port. |
 
 NVIDIA requests use the official OpenAI JavaScript SDK with base URL `https://integrate.api.nvidia.com/v1`, a 30-second timeout, and one SDK retry. API keys are read server-side only and are never included in status responses, activity logs, or frontend payloads.

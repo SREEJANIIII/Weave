@@ -1,4 +1,13 @@
-export const YARN = { calendar: 'calendar', notes: 'notes', tasks: 'tasks', money: 'money', wishlist: 'wishlist' };
+export const YARN = { calendar: 'calendar', notes: 'notes', tasks: 'tasks', money: 'money', wishlist: 'wishlist', appliances: 'appliances' };
+
+export const APP_REGISTRY = [
+  { id: 'calendar', name: 'Calendar', blurb: 'Events and free time' },
+  { id: 'notes', name: 'Notes', blurb: 'Meeting notes and plans' },
+  { id: 'tasks', name: 'Tasks', blurb: 'To-dos and due dates' },
+  { id: 'money', name: 'Money', blurb: 'Imported statement' },
+  { id: 'wishlist', name: 'Wishlist & sizes', blurb: 'Saved products and size intelligence' },
+  { id: 'appliances', name: 'Appliances & Bills', blurb: 'Bills, warranties and deadlines' },
+];
 
 export const ICON = {
   calendar: 'i-calendar',
@@ -6,6 +15,7 @@ export const ICON = {
   tasks: 'i-tasks',
   money: 'i-money',
   wishlist: 'i-heart',
+  appliances: 'i-plug',
   email: 'i-mail',
   fitness: 'i-fitness',
   travel: 'i-plug',

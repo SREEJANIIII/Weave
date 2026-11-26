@@ -41,17 +41,17 @@ async function api(path, body) {
   return { ok: res.ok, status: res.status, data };
 }
 
-export function WorkspacePage() {
+export function WorkspacePage({ routeView = null }) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const view = location.pathname.startsWith('/app/wishlist')
+  const view = routeView ?? (location.pathname.startsWith('/app/wishlist')
     ? 'wishlist'
     : location.pathname.startsWith('/app/size-profile')
       ? 'size-profile'
       : location.pathname.startsWith('/app/appliances')
         ? 'appliances'
-        : 'ask';
+        : 'ask');
 
   usePageMeta({
     page: 'app',

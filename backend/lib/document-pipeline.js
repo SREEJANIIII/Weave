@@ -16,9 +16,6 @@ export function sniffFile(buffer, declaredMime = '', originalName = '') {
   if (bytes.subarray(0, 5).equals(PDF_MAGIC)) return { ext: '.pdf', mimeType: 'application/pdf' };
   if (bytes.subarray(0, 8).equals(PNG_MAGIC)) return { ext: '.png', mimeType: 'image/png' };
   if (bytes.subarray(0, 3).equals(JPEG_MAGIC)) return { ext: '.jpg', mimeType: 'image/jpeg' };
-  const ext = String(originalName).toLowerCase().match(/\.(pdf|png|jpe?g)$/)?.[0] ?? '';
-  const allowed = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
-  if (ext && allowed[ext] && (declaredMime === allowed[ext] || declaredMime.startsWith('application/octet-stream'))) return { ext, mimeType: allowed[ext] };
   throw new Error('Unsupported file type. Upload a PDF, JPG, JPEG or PNG document.');
 }
 
