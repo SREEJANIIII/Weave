@@ -1,4 +1,4 @@
-import { lookupBrandChart } from '../data/wishlistSample.js';
+import { lookupBrandChart, normalizeCategoryLabel } from '../data/wishlistSample.js';
 import { formatMeasure, formatRange } from './units.js';
 
 const MEASURE_LABELS = {
@@ -175,7 +175,7 @@ export function recommendSize(profile, product) {
   return {
     status: ambiguous ? 'ambiguous' : 'recommended',
     brand: chart.brand,
-    category: product.category,
+    category: normalizeCategoryLabel(product.category),
     chart,
     recommendedSize: best.size,
     runnerUpSize: ambiguous && second ? second.size : null,
@@ -185,6 +185,110 @@ export function recommendSize(profile, product) {
       rangeFormatted: formatRange(r.minCm, r.maxCm, unit),
     })),
     explanation,
+    caveats,
+  };
+}
+
+/**
+ * Merges a live backend MCP `match_product_size` + `get_brand_size_chart` response with the
+ * user's authorised profile so the modal shows backend confidence/disclaimers and full rows.
+ */
+export function mergeBackendSizeMatch(profile, product, apiPayload) {
+  if (!apiPayload) return recommendSize(profile, product);
+  const unit = profile?.unit || apiPayload.chart?.unit || 'cm';
+  const catLabel = normalizeCategoryLabel(product?.category || apiPayload.chart?.category || '');
+
+  if (apiPayload.status === 'unavailable' && !apiPayload.match) {
+    const isNoProfile = /profile/i.test(apiPayload.reason || '');
+    return {
+      status: isNoProfile ? 'incomplete_profile' : 'no_chart',
+      source: 'backend-mcp',
+      brand: product?.brand || 'Unknown brand',
+      category: catLabel,
+      chart: null,
+      recommendedSize: null,
+      runnerUpSize: null,
+      rows: [],
+      explanation: apiPayload.reason || `No size recommendation is available for ${product?.brand || 'this brand'}.`,
+      caveats: [
+        isNoProfile
+          ? 'Save measurements in My Size Profile so Weave can match against this brand chart.'
+          : 'Weave never falls back to a universal S/M/L conversion when a chart is missing.',
+      ],
+    };
+  }
+
+  const m = apiPayload.match;
+  const rawChart = apiPayload.chart;
+  const normalizedChart = rawChart
+    ? {
+        brand: rawChart.brand,
+        region: rawChart.region,
+        note: rawChart.note || `Synthetic backend chart (${rawChart.region || 'IN'}, ${rawChart.unit}).`,
+        category: normalizeCategoryLabel(rawChart.category),
+        unit: rawChart.unit,
+        sizes: (rawChart.sizes ?? []).map((row) => ({ size: row.size, ...(row.measurements ?? {}) })),
+      }
+    : lookupBrandChart(product?.brand, product?.category);
+
+  if (!m || m.status !== 'matched') {
+    return {
+      status: 'no_chart',
+      source: 'backend-mcp',
+      brand: product?.brand || 'Unknown brand',
+      category: catLabel,
+      chart: normalizedChart,
+      recommendedSize: null,
+      runnerUpSize: null,
+      rows: [],
+      explanation: m?.reason || apiPayload.reason || 'Size recommendation unavailable.',
+      caveats: ['Matched via backend Wishlist & sizes MCP server.'],
+    };
+  }
+
+  const localFallback = normalizedChart ? recommendSize(profile, product) : null;
+  const matchedRow = normalizedChart?.sizes?.find((r) => r.size === m.recommendation);
+  const rows = matchedRow
+    ? Object.keys(matchedRow)
+        .filter((k) => k !== 'size')
+        .map((k) => {
+          const val = profile?.[k];
+          const [minCm, maxCm] = matchedRow[k];
+          const ev = val != null ? evaluateRow(k, Number(val), [minCm, maxCm], FIT_BIAS_CM[profile?.fit] ?? 0) : null;
+          return {
+            key: k,
+            label: MEASURE_LABELS[k] ?? k,
+            userCm: val ?? null,
+            minCm,
+            maxCm,
+            verdict: ev ? ev.verdict : 'Not set',
+            status: ev ? ev.status : 'ease',
+            userFormatted: formatMeasure(val, unit, profile?.masked),
+            rangeFormatted: formatRange(minCm, maxCm, unit),
+          };
+        })
+    : (localFallback?.rows ?? []);
+
+  const caveats = [];
+  if (m.disclaimer) caveats.push(m.disclaimer);
+  if (m.missingMeasurements?.length) {
+    caveats.push(`Missing profile measurements for this chart: ${m.missingMeasurements.join(', ')}.`);
+  }
+  if (m.betweenSizes) {
+    caveats.push('Your measurements sit close to two sizes on this brand chart.');
+  }
+
+  return {
+    status: m.betweenSizes ? 'ambiguous' : 'recommended',
+    source: 'backend-mcp',
+    confidence: m.confidence,
+    brand: m.chart?.brand ?? product?.brand,
+    category: catLabel,
+    chart: normalizedChart,
+    recommendedSize: m.recommendation,
+    runnerUpSize: m.betweenSizes && localFallback?.runnerUpSize && localFallback.runnerUpSize !== m.recommendation ? localFallback.runnerUpSize : null,
+    rows,
+    explanation: m.explanation || localFallback?.explanation || '',
     caveats,
   };
 }

@@ -28,7 +28,7 @@ function withSourceIds(server, value, depth = 0) {
   return copy;
 }
 
-const COUNT_KEYS = ['events', 'notes', 'tasks', 'transactions', 'slots'];
+const COUNT_KEYS = ['events', 'notes', 'tasks', 'transactions', 'slots', 'items', 'reminders'];
 function safeArgs(server, tool, args) {
   if (server !== 'wishlist' || !['get_size_profile', 'update_size_profile', 'match_product_size'].includes(tool)) return args;
   const copy = { ...args };
@@ -48,6 +48,10 @@ function describe(tool, data) {
   if (data.note) return data.note.title;
   if (data.task) return data.task.title;
   if (data.event) return data.event.title;
+  if (data.item) return data.item.product_name;
+  if (data.deleted?.product_name) return data.deleted.product_name;
+  if (data.match?.recommendation) return `Size ${data.match.recommendation}`;
+  if (data.profile) return 'size profile';
   return 'done';
 }
 

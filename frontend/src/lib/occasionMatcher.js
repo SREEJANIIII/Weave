@@ -21,8 +21,10 @@ function expandTerms(text) {
   return [...out];
 }
 
-export function daysUntil(isoDate) {
-  const now = new Date();
+export function daysUntil(isoDate, referenceDate) {
+  const now = referenceDate && /^\d{4}-\d{2}-\d{2}$/.test(referenceDate)
+    ? new Date(`${referenceDate}T00:00:00`)
+    : new Date();
   now.setHours(0, 0, 0, 0);
   const target = new Date(`${isoDate}T00:00:00`);
   return Math.round((target - now) / (1000 * 60 * 60 * 24));
@@ -37,26 +39,32 @@ export function activeLeadWindows(reminderPrefs) {
 
 /**
  * Matches upcoming calendar events with saved wishlist items and surfaces reminders
- * that fall inside the user's configured lead-day windows.
+ * that fall inside the user's configured lead-day windows, syncing with backend reminders if available.
  */
-export function matchOccasions(wishlistItems, calendarEvents, reminderPrefs) {
+export function matchOccasions(wishlistItems, calendarEvents, reminderPrefs, referenceDate, backendReminders = []) {
   const windows = activeLeadWindows(reminderPrefs);
   const maxWindow = windows.length ? Math.max(...windows) : 30;
   const dismissed = new Set(reminderPrefs?.dismissedIds ?? []);
+  const savedItems = wishlistItems.filter((it) => !it.status || it.status === 'saved');
 
   const matches = [];
 
   for (const event of calendarEvents) {
-    const days = daysUntil(event.date);
+    const days = daysUntil(event.date, referenceDate);
     if (days < 0) continue;
 
     const eventTerms = new Set([...expandTerms(event.occasion), ...expandTerms(event.title)]);
-    const items = wishlistItems.filter((item) => {
+    const items = savedItems.filter((item) => {
       const itemTerms = expandTerms(item.occasion);
       return itemTerms.some((t) => eventTerms.has(t));
     });
 
     if (!items.length) continue;
+
+    const matchingBackendReminders = (backendReminders ?? []).filter((r) => r.calendar_event_id === event.id);
+    const activeBackend = matchingBackendReminders.filter((r) => !['dismissed', 'completed', 'cancelled'].includes(r.status));
+    const allBackendDismissed =
+      matchingBackendReminders.length > 0 && matchingBackendReminders.every((r) => r.status === 'dismissed');
 
     // Smallest configured lead window >= days remaining (or within maxWindow)
     const eligibleWindows = windows.filter((w) => days <= w);
@@ -69,7 +77,9 @@ export function matchOccasions(wishlistItems, calendarEvents, reminderPrefs) {
       items,
       triggeredWindow,
       inWindow: days <= maxWindow && windows.length > 0,
-      dismissed: dismissed.has(event.id),
+      dismissed: dismissed.has(event.id) || allBackendDismissed,
+      backendReminderIds: activeBackend.map((r) => r.id),
+      backendStatus: activeBackend[0]?.status ?? (allBackendDismissed ? 'dismissed' : null),
     });
   }
 

@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 let connectionPromise;
 
 export async function connectDatabase() {
-  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is required. Configure MongoDB Atlas in backend/.env; Weave will not fall back to local or in-memory storage.');
+  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is required. Configure MONGODB_URI in backend/.env (local mongodb://127.0.0.1:27017/weave or Atlas); Weave will not fall back to local or in-memory storage.');
   if (mongoose.connection.readyState === 1) return mongoose.connection;
   if (!connectionPromise) {
     connectionPromise = mongoose.connect(process.env.MONGODB_URI, { dbName: process.env.MONGODB_DB_NAME || undefined, serverSelectionTimeoutMS: 8000, connectTimeoutMS: 8000, maxPoolSize: 5 }).catch((error) => { connectionPromise = null; throw new Error(`MongoDB connection failed: ${error.message}`); });

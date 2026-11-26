@@ -96,10 +96,12 @@ export function InspectorPanel({
       {/* Apps Panel */}
       <div className="panel" id="panel-apps" role="tabpanel" aria-labelledby="tab-apps" hidden={tab !== 'apps'}>
         {offline ? (
-          <div className="empty">
-            <strong>No apps to show</strong>
-            The Weave server is not running, so no MCP servers are connected.
-          </div>
+          <>
+            <div className="empty">
+              <strong>Backend offline</strong>
+              The Weave Express/MongoDB server is not running. Wishlist &amp; Size Q&amp;A is using local browser sample data.
+            </div>
+          </>
         ) : !status ? (
           <>
             {[1, 2, 3, 4].map((n) => (
@@ -117,10 +119,14 @@ export function InspectorPanel({
                 const on = a.enabled && a.status === 'connected';
                 const broken = a.status !== 'connected';
                 const reads = a.tools.filter((t) => t.readOnly).length;
+                const dataLabel =
+                  a.id === 'wishlist'
+                    ? 'MongoDB'
+                    : 'sample data';
                 const line = broken
                   ? `Couldn't connect: ${a.error ?? a.status}`
                   : a.enabled
-                    ? `${a.blurb}. ${plural(a.tools.length, 'tool')}, sample data.`
+                    ? `${a.blurb}. ${plural(a.tools.length, 'tool')}, ${dataLabel}.`
                     : 'Switched off. Weave will not read it.';
                 return (
                   <li key={a.id} className={`app${on ? '' : ' is-off'}`} data-yarn={yarn}>
@@ -162,18 +168,6 @@ export function InspectorPanel({
                   </li>
                 );
               })}
-            </ul>
-            <h2>Wishlist &amp; Size Intelligence</h2>
-            <ul className="apps">
-              <li className="app" data-yarn="wishlist">
-                <div className="app-row">
-                  <span className="swatch" data-yarn="wishlist" aria-hidden="true" />
-                  <div>
-                    <div className="app-name">Smart Wishlist &amp; Size Profile</div>
-                    <div className="app-blurb">Local browser sample data. External brand APIs are not connected yet.</div>
-                  </div>
-                </div>
-              </li>
             </ul>
             <h2>Planned, not connected</h2>
             <ul className="planned">

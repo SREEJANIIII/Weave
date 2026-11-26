@@ -21,7 +21,7 @@ export function AppTopBar({ status, busy, offline, reminderCount = 0, onSetMode,
           id: 'offline',
           label: 'Offline',
           disabled: false,
-          title: 'Offline script: real MCP calls, hand-written reasoning for the two example questions',
+          title: 'Offline script: real MCP calls, hand-written reasoning for demo and wishlist questions',
         },
       ]
     : [];

@@ -4,9 +4,10 @@ Weave answers one everyday question across the apps you use, shows the exact rec
 
 ```
 Ask ──▶ Weave app ──▶ planner (NVIDIA, or the offline script)
+Ask ──▶ Weave app ──▶ planner (NVIDIA, or the offline script)
                           │  picks tools
                           ▼
-                     MCP client ──tools/list, tools/call──▶ MCP servers: Calendar · Notes · Tasks · Money
+                     MCP client ──tools/list, tools/call──▶ MCP servers: Calendar · Notes · Tasks · Money · Wishlist
                           │
              reads run straight away · writes are held as drafts
                           ▼
@@ -35,7 +36,7 @@ Weave/
 
 ## Run it
 
-Needs Node 22.5 or later. Wishlist, size profiles, and reminders use MongoDB Atlas through Mongoose. The UI in `frontend/` is built with React + Vite, and the Express server in `backend/` serves the built React app (`frontend/dist`) and `/api/*`. MongoDB must be reachable before the server starts; a failed connection prints an explicit error and the HTTP server is not started.
+Needs Node 22.5 or later. Wishlist, size profiles, and reminders use MongoDB (local MongoDB / Compass at `mongodb://127.0.0.1:27017/weave`, or MongoDB Atlas) through Mongoose. The UI in `frontend/` is built with React + Vite, and the Express server in `backend/` serves the built React app (`frontend/dist`) and `/api/*`. MongoDB must be reachable before the server starts; a failed connection prints an explicit error and the HTTP server is not started.
 
 ### 1. Install
 
@@ -71,7 +72,7 @@ Run `npm run dev` from the repo root for instant React HMR while talking to the 
 Still in `backend/`:
 
 ```bash
-cp backend/.env.example backend/.env   # then put your key in backend/.env (or: ant auth login)
+cp backend/.env.example backend/.env   # then set NVIDIA_API_KEY in backend/.env
 npm start
 ```
 
@@ -158,7 +159,7 @@ Reminder reconciliation uses a unique `(wishlist_item_id, calendar_event_id, rem
 | `WEAVE_MODE` | `nvidia` if a key is found, else `offline` | Starting planner (`nvidia` or `offline`). |
 | `WEAVE_TODAY` | today | Pin "today" (YYYY-MM-DD) for a repeatable demo. |
 | `WEAVE_STATEMENT_CSV` | `data/statement.csv` (relative to `backend/`) | Statement file for the Money server. |
-| `MONGODB_URI` | none | Required MongoDB Atlas connection string. |
+| `MONGODB_URI` | none | Required MongoDB connection string (`mongodb://127.0.0.1:27017/weave` for local Compass or Atlas URI). |
 | `MONGODB_DB_NAME` | URI-selected database | Optional database name passed to Mongoose. |
 | `WEAVE_PROFILE_ENCRYPTION_KEY` | none | Optional base64-encoded 32-byte AES-256-GCM key for size-profile encryption. |
 | `PORT` | `4321` | Server port. |
@@ -169,15 +170,18 @@ NVIDIA requests use the official OpenAI JavaScript SDK with base URL `https://in
 
 Create an NVIDIA API key from the [NVIDIA hosted API catalog](https://build.nvidia.com/openai/gpt-oss-20b?nim=hosted), copy `backend/.env.example` to `backend/.env`, and set `NVIDIA_API_KEY`. The default `openai/gpt-oss-20b` model is documented in NVIDIA's catalog as supporting function calling; set `NVIDIA_MODEL` to another catalog model available to your key if needed. Restart Weave after changing the environment.
 
-### MongoDB Atlas setup
+### MongoDB setup (Local Compass or Atlas)
 
-1. Create an Atlas project and free/shared cluster.
-2. Create a database user with access to the Weave database.
-3. Add the development machine's IP address under Network Access (or use the project's controlled network policy).
-4. Copy `backend/.env.example` to `backend/.env` and set `MONGODB_URI` and optionally `MONGODB_DB_NAME`. Keep credentials URL-encoded and never commit `.env`.
-5. Start Weave with `npm start`. If the URI is missing or MongoDB cannot be reached, startup fails with an explicit error; no in-memory fallback is used.
+**Local MongoDB / Compass (configured in `backend/.env`):**
+1. Ensure local MongoDB Server is running (`mongodb://127.0.0.1:27017`) and open `mongodb://127.0.0.1:27017/weave` in MongoDB Compass to inspect collections.
+2. In `backend/.env`, set `MONGODB_URI=mongodb://127.0.0.1:27017/weave` and `MONGODB_DB_NAME=weave` (plus optional `WEAVE_PROFILE_ENCRYPTION_KEY`).
+3. Start Weave with `npm start` (or `npm run dev`).
 
-Mongoose creates the `wishlistitems`, `sizeprofiles`, and `reminders` collections and their indexes. Reminder statuses are `suggested`, `pending_approval`, `approved`, `dismissed`, `completed`, and `cancelled`. Reconciliation is on demand; there is no background notification scheduler.
+**MongoDB Atlas (optional cloud alternative):**
+1. Create an Atlas project, database user, and Network Access allowlist entry.
+2. Set `MONGODB_URI=mongodb+srv://...` in `backend/.env` and restart.
+
+Mongoose creates the `wishlistitems`, `sizeprofiles`, and `reminders` collections and their indexes cleanly in either local MongoDB or Atlas. Reminder statuses are `suggested`, `pending_approval`, `approved`, `dismissed`, `completed`, and `cancelled`. Reconciliation is on demand; there is no background notification scheduler.
 
 This phase does not automatically migrate an existing SQLite file into Atlas. Existing Atlas data is preserved and sample documents are inserted only into empty collections; any SQLite-to-Atlas migration should be an explicit, reviewed data operation.
 

@@ -20,11 +20,11 @@ const state = {
 async function main() {
   try {
     await connectDatabase();
-    console.log('  Database MongoDB Atlas connected');
+    console.log('  Database  MongoDB connected');
   } catch (err) {
     console.error('\n  Weave cannot start: MongoDB connection failed.');
     console.error(`  ${err.message}`);
-    console.error('  Configure MONGODB_URI (and optionally MONGODB_DB_NAME) in backend/.env, then restart.\n');
+    console.error('  Configure MONGODB_URI (e.g. mongodb://127.0.0.1:27017/weave) in backend/.env, then restart.\n');
     process.exit(1);
   }
 

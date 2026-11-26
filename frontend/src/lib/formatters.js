@@ -29,6 +29,36 @@ export const EDITABLE = {
     ['start', 'time', 'Start'],
     ['end', 'time', 'End'],
   ],
+  save_wishlist_item: [
+    ['product_name', 'text', 'Product name'],
+    ['brand', 'text', 'Brand'],
+    ['category', 'text', 'Category'],
+    ['occasion', 'text', 'Occasion'],
+    ['product_url', 'url', 'Product URL'],
+    ['image_url', 'url', 'Image URL'],
+    ['price', 'number', 'Price (INR)'],
+    ['notes', 'text', 'Notes'],
+  ],
+  update_wishlist_item: [
+    ['product_name', 'text', 'Product name'],
+    ['brand', 'text', 'Brand'],
+    ['category', 'text', 'Category'],
+    ['occasion', 'text', 'Occasion'],
+    ['status', 'text', 'Status (saved/purchased/archived)'],
+    ['product_url', 'url', 'Product URL'],
+    ['notes', 'text', 'Notes'],
+  ],
+  update_size_profile: [
+    ['unit', 'text', 'Unit (cm/inches)'],
+    ['preferred_fit', 'text', 'Fit (slim/regular/oversized)'],
+    ['preferred_categories', 'text', 'Categories (comma-separated)'],
+    ['bust', 'number', 'Bust'],
+    ['waist', 'number', 'Waist'],
+    ['hips', 'number', 'Hips'],
+    ['shoulder', 'number', 'Shoulder'],
+    ['inseam', 'number', 'Inseam'],
+    ['height', 'number', 'Height'],
+  ],
 };
 
 export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -85,8 +115,25 @@ export function describeRecord(r) {
         meta: `${money.format(r.total)} across ${plural(r.count, 'purchase')}`,
         snippet: '',
       };
+    case 'wishlist_item':
+      return {
+        title: r.product_name ?? r.title ?? r.id,
+        meta: [r.brand, r.category, r.occasion, r.status].filter(Boolean).join(' · '),
+        snippet: r.notes || r.description || '',
+      };
+    case 'size_profile':
+      return {
+        title: 'My Size Profile',
+        meta: [r.preferred_fit && `${r.preferred_fit} fit`, r.unit && `Unit: ${r.unit}`].filter(Boolean).join(' · '),
+        snippet: r.privacy ?? 'Private measurements (redacted from public activity logs).',
+      };
+    case 'reminder':
+      return {
+        title: `${r.occasion || 'Occasion'} reminder (${r.reminder_window ?? '?'}d window)`,
+        meta: [r.event_date && fmtDate(r.event_date), r.status].filter(Boolean).join(' · '),
+        snippet: '',
+      };
     default:
-      return { title: r.title ?? r.id, meta: '', snippet: '' };
+      return { title: r.title ?? r.product_name ?? r.id, meta: '', snippet: '' };
   }
 }
-

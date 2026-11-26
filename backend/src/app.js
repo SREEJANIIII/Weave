@@ -37,7 +37,7 @@ export function createApp({ root, hub, proposals, state, port }) {
   // CORS headers for the same origins the prototype has always accepted (including Vite's dev server).
   app.use(cors({
     origin: (origin, callback) => callback(null, allowedOrigin(origin, port)),
-    methods: ['GET', 'POST', 'HEAD', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
     preflightContinue: true,
   }));
 
