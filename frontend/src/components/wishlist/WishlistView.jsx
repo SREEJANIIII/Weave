@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { Icon } from '../Icons';
 import { CATEGORIES } from '../../data/wishlistSample';
+import { money } from '../../lib/formatters';
 import { getItemEventMatch, matchOccasions } from '../../lib/occasionMatcher';
 import { recommendSize } from '../../lib/sizeEngine';
 import { WishlistFormModal } from './WishlistFormModal';
-import { SizeIntelligenceModal } from './SizeIntelligenceModal';
 
 const OCCASION_YARN = {
   diwali: 'calendar',
@@ -15,6 +15,13 @@ const OCCASION_YARN = {
   festival: 'calendar',
   casual: 'tasks',
 };
+
+const STATUS_FILTERS = [
+  { id: 'all', label: 'All items' },
+  { id: 'saved', label: 'Saved' },
+  { id: 'purchased', label: 'Purchased' },
+  { id: 'archived', label: 'Archived' },
+];
 
 function yarnForOccasion(occ = '') {
   const key = occ.trim().toLowerCase();
@@ -43,24 +50,32 @@ export function WishlistView({
   sizeProfile,
   occasions,
   reminderPrefs,
+  backendReminders = [],
+  syncMode = 'local',
+  calendarEnabled = false,
+  syncing = false,
+  serverToday,
   onAdd,
   onUpdate,
   onRemove,
   onDismissReminder,
+  onReconcileReminders,
+  onInspectSize,
   onGoToProfile,
 }) {
   const [search, setSearch] = useState('');
   const [occasionFilter, setOccasionFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('saved');
   const [fitFilter, setFitFilter] = useState('all'); // 'all' | 'matched'
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [sizeTarget, setSizeTarget] = useState(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState(null);
+  const [reconciling, setReconciling] = useState(false);
 
   const occasionMatches = useMemo(
-    () => matchOccasions(wishlist, occasions, reminderPrefs),
-    [wishlist, occasions, reminderPrefs],
+    () => matchOccasions(wishlist, occasions, reminderPrefs, serverToday, backendReminders),
+    [wishlist, occasions, reminderPrefs, serverToday, backendReminders],
   );
 
   const activeReminders = useMemo(
@@ -84,18 +99,25 @@ export function WishlistView({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return enriched.filter(({ item, sizeRec }) => {
-      if (occasionFilter !== 'All' && item.occasion.toLowerCase() !== occasionFilter.toLowerCase()) return false;
+      const st = item.status || 'saved';
+      if (statusFilter !== 'all' && st !== statusFilter) return false;
+      if (occasionFilter !== 'All' && (item.occasion || '').toLowerCase() !== occasionFilter.toLowerCase()) return false;
       if (categoryFilter !== 'All' && item.category !== categoryFilter) return false;
       if (fitFilter === 'matched' && !sizeRec.recommendedSize) return false;
       if (q) {
-        const hay = `${item.name} ${item.brand} ${item.occasion} ${item.category} ${item.notes}`.toLowerCase();
+        const hay = `${item.name} ${item.brand} ${item.occasion} ${item.category} ${item.notes} ${item.description ?? ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [enriched, occasionFilter, categoryFilter, fitFilter, search]);
+  }, [enriched, statusFilter, occasionFilter, categoryFilter, fitFilter, search]);
 
-  const sizeModalResult = sizeTarget ? recommendSize(sizeProfile, sizeTarget) : null;
+  const sourceBadge =
+    syncMode === 'backend'
+      ? 'MongoDB + Wishlist MCP'
+      : syncMode === 'disabled'
+        ? 'Wishlist & sizes switched off in Apps'
+        : 'Local sample data · Backend offline';
 
   return (
     <div className="wl-page">
@@ -103,7 +125,7 @@ export function WishlistView({
         <div>
           <div className="wl-head-title-row">
             <h1 className="greeting">Smart Wishlist</h1>
-            <span className="wl-sample-tag">Sample data · No store accounts connected</span>
+            <span className="wl-sample-tag">{sourceBadge}</span>
           </div>
           <p className="ask-sub">
             Save products by occasion, compare them with your private measurements against each brand&rsquo;s chart, and catch upcoming calendar events before it&rsquo;s too late.
@@ -112,6 +134,7 @@ export function WishlistView({
         <button
           className="btn btn-primary"
           type="button"
+          disabled={syncMode === 'disabled'}
           onClick={() => {
             setEditingItem(null);
             setFormOpen(true);
@@ -122,58 +145,95 @@ export function WishlistView({
         </button>
       </div>
 
+      {syncMode === 'disabled' && (
+        <div className="notice" role="status">
+          <Icon name="i-alert" />
+          <div>
+            <strong>Wishlist &amp; sizes is switched off.</strong>
+            <p>Enable Wishlist &amp; sizes in the Ask Weave Apps inspector to load or save items from MongoDB.</p>
+          </div>
+        </div>
+      )}
+
       {/* Contextual Calendar Occasion Reminders */}
-      {activeReminders.length > 0 && (
+      {(activeReminders.length > 0 || (syncMode === 'backend' && calendarEnabled)) && (
         <section className="wl-reminders" aria-label="Upcoming occasion reminders">
           <div className="wl-reminders-head">
             <span className="wl-reminders-title">
               <Icon name="i-bell" />
               Upcoming occasion reminders
             </span>
-            <button className="btn btn-link btn-sm" type="button" onClick={onGoToProfile}>
-              Customise reminder timing
-            </button>
+            <div className="wl-reminders-head-actions">
+              {syncMode === 'backend' && calendarEnabled && onReconcileReminders && (
+                <button
+                  className="btn btn-quiet btn-sm"
+                  type="button"
+                  disabled={reconciling || syncing}
+                  onClick={async () => {
+                    setReconciling(true);
+                    await onReconcileReminders();
+                    setReconciling(false);
+                  }}
+                >
+                  <Icon name="i-replay" />
+                  <span>{reconciling ? 'Syncing...' : 'Sync reminders'}</span>
+                </button>
+              )}
+              <button className="btn btn-link btn-sm" type="button" onClick={onGoToProfile}>
+                Customise reminder timing
+              </button>
+            </div>
           </div>
-          <div className="wl-reminders-list">
-            {activeReminders.map((m) => (
-              <div key={m.id} className="wl-reminder-card" data-yarn={yarnForOccasion(m.event.occasion)}>
-                <div className="wl-reminder-main">
-                  <div className="wl-reminder-top">
-                    <span className="swatch" data-yarn={yarnForOccasion(m.event.occasion)} aria-hidden="true" />
-                    <strong>{m.event.title}</strong>
-                    <span className="wl-day-pill">
-                      {m.daysUntil === 0 ? 'Today' : `In ${m.daysUntil} days`}
-                    </span>
-                    {m.triggeredWindow && (
-                      <span className="wl-window-pill">{m.triggeredWindow}-day reminder</span>
-                    )}
+
+          {activeReminders.length === 0 ? (
+            <p className="panel-note">
+              No active reminders within your lead windows. Click Sync reminders after adding wishlist occasions or calendar events.
+            </p>
+          ) : (
+            <div className="wl-reminders-list">
+              {activeReminders.map((m) => (
+                <div key={m.id} className="wl-reminder-card" data-yarn={yarnForOccasion(m.event.occasion)}>
+                  <div className="wl-reminder-main">
+                    <div className="wl-reminder-top">
+                      <span className="swatch" data-yarn={yarnForOccasion(m.event.occasion)} aria-hidden="true" />
+                      <strong>{m.event.title}</strong>
+                      <span className="wl-day-pill">
+                        {m.daysUntil === 0 ? 'Today' : `In ${m.daysUntil} days`}
+                      </span>
+                      {m.triggeredWindow && (
+                        <span className="wl-window-pill">{m.triggeredWindow}-day reminder</span>
+                      )}
+                      {m.backendStatus && (
+                        <span className="wl-sample-tag">DB: {m.backendStatus}</span>
+                      )}
+                    </div>
+                    <p className="wl-reminder-sub">
+                      {`${m.items.length} saved ${m.items.length === 1 ? 'item matches' : 'items match'}: ${m.items
+                        .map((it) => `${it.name} (${it.brand})`)
+                        .join(', ')}`}
+                    </p>
                   </div>
-                  <p className="wl-reminder-sub">
-                    {`${m.items.length} saved ${m.items.length === 1 ? 'item matches' : 'items match'}: ${m.items
-                      .map((it) => `${it.name} (${it.brand})`)
-                      .join(', ')}`}
-                  </p>
+                  <div className="wl-reminder-actions">
+                    <button
+                      className="btn btn-quiet btn-sm"
+                      type="button"
+                      onClick={() => setOccasionFilter(m.event.occasion)}
+                    >
+                      Show items
+                    </button>
+                    <button
+                      className="btn btn-link btn-sm"
+                      type="button"
+                      aria-label={`Dismiss reminder for ${m.event.title}`}
+                      onClick={() => onDismissReminder(m.event.id, m.backendReminderIds)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
                 </div>
-                <div className="wl-reminder-actions">
-                  <button
-                    className="btn btn-quiet btn-sm"
-                    type="button"
-                    onClick={() => setOccasionFilter(m.event.occasion)}
-                  >
-                    Show items
-                  </button>
-                  <button
-                    className="btn btn-link btn-sm"
-                    type="button"
-                    aria-label={`Dismiss reminder for ${m.event.title}`}
-                    onClick={() => onDismissReminder(m.event.id)}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
@@ -204,6 +264,19 @@ export function WishlistView({
         </div>
 
         <div className="wl-filter-row">
+          <div className="wl-filter-group" role="group" aria-label="Filter by status">
+            {STATUS_FILTERS.map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                className={`wl-pill-btn${statusFilter === st.id ? ' is-on' : ''}`}
+                onClick={() => setStatusFilter(st.id)}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+
           <label className="wl-select-inline">
             <span>Category</span>
             <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
@@ -220,18 +293,19 @@ export function WishlistView({
           >
             Has size match only
           </button>
-          {(occasionFilter !== 'All' || categoryFilter !== 'All' || fitFilter !== 'all' || search) && (
+          {(occasionFilter !== 'All' || categoryFilter !== 'All' || statusFilter !== 'saved' || fitFilter !== 'all' || search) && (
             <button
               type="button"
               className="btn btn-link btn-sm"
               onClick={() => {
                 setOccasionFilter('All');
                 setCategoryFilter('All');
+                setStatusFilter('saved');
                 setFitFilter('all');
                 setSearch('');
               }}
             >
-              Clear filters
+              Reset filters
             </button>
           )}
         </div>
@@ -241,10 +315,11 @@ export function WishlistView({
       {filtered.length === 0 ? (
         <div className="empty wl-empty">
           <strong>No matching wishlist items</strong>
-          <p>Try clearing your filters or add a new product to track for an upcoming occasion.</p>
+          <p>Try switching status/occasion filters or add a new product to track for an upcoming occasion.</p>
           <button
             className="btn btn-quiet btn-sm"
             type="button"
+            disabled={syncMode === 'disabled'}
             onClick={() => {
               setEditingItem(null);
               setFormOpen(true);
@@ -258,25 +333,37 @@ export function WishlistView({
           {filtered.map(({ item, sizeRec, eventMatch }) => {
             const occYarn = yarnForOccasion(item.occasion);
             const isRemoving = confirmRemoveId === item.id;
+            const itemStatus = item.status || 'saved';
 
             return (
-              <article key={item.id} className="wl-card" data-yarn={occYarn}>
+              <article key={item.id} className={`wl-card${itemStatus !== 'saved' ? ' is-muted-card' : ''}`} data-yarn={occYarn}>
                 <div className="wl-card-media">
                   <ProductImage src={item.image} alt={`${item.name} by ${item.brand}`} />
-                  <span className="wl-occ-badge" data-yarn={occYarn}>
-                    {item.occasion}
-                  </span>
-                  {item.isSample && <span className="wl-img-sample">Sample</span>}
+                  {item.occasion && (
+                    <span className="wl-occ-badge" data-yarn={occYarn}>
+                      {item.occasion}
+                    </span>
+                  )}
+                  {(item.isSample || itemStatus !== 'saved') && (
+                    <span className="wl-img-sample">
+                      {itemStatus !== 'saved' ? itemStatus : 'Sample'}
+                    </span>
+                  )}
                 </div>
 
                 <div className="wl-card-body">
                   <div className="wl-card-meta-top">
                     <span className="wl-brand">{item.brand}</span>
-                    <span className="wl-cat">{item.category}</span>
+                    <span className="wl-cat">
+                      {item.category}
+                      {item.price ? ` · ${money.format(item.price)}` : ''}
+                    </span>
                   </div>
                   <h2 className="wl-card-title">{item.name}</h2>
 
-                  {item.notes && <p className="wl-card-notes">{item.notes}</p>}
+                  {(item.notes || item.description) && (
+                    <p className="wl-card-notes">{item.notes || item.description}</p>
+                  )}
 
                   <div className="wl-card-signals">
                     <span
@@ -303,25 +390,39 @@ export function WishlistView({
 
                   <div className="wl-card-foot">
                     <span className="wl-saved-date">Saved {fmtSavedDate(item.savedAt)}</span>
-                    {item.url && (
-                      <a
-                        className="wl-ext-link"
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Open saved product link"
+                    <div className="wl-card-links">
+                      <button
+                        type="button"
+                        className="btn btn-link btn-sm"
+                        disabled={syncMode === 'disabled'}
+                        onClick={() =>
+                          onUpdate(item.id, {
+                            status: itemStatus === 'saved' ? 'purchased' : 'saved',
+                          })
+                        }
                       >
-                        <span>View link</span>
-                        <Icon name="i-external" />
-                      </a>
-                    )}
+                        {itemStatus === 'saved' ? 'Mark purchased' : 'Move to saved'}
+                      </button>
+                      {item.url && (
+                        <a
+                          className="wl-ext-link"
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open saved product link"
+                        >
+                          <span>View link</span>
+                          <Icon name="i-external" />
+                        </a>
+                      )}
+                    </div>
                   </div>
 
                   <div className="wl-card-actions">
                     <button
                       className="btn btn-primary btn-sm wl-find-size-btn"
                       type="button"
-                      onClick={() => setSizeTarget(item)}
+                      onClick={() => onInspectSize?.(item)}
                     >
                       <Icon name="i-ruler" />
                       <span>Find My Size</span>
@@ -353,6 +454,7 @@ export function WishlistView({
                           className="btn btn-quiet btn-sm"
                           type="button"
                           aria-label={`Edit ${item.name}`}
+                          disabled={syncMode === 'disabled'}
                           onClick={() => {
                             setEditingItem(item);
                             setFormOpen(true);
@@ -364,6 +466,7 @@ export function WishlistView({
                           className="btn btn-quiet btn-sm"
                           type="button"
                           aria-label={`Remove ${item.name}`}
+                          disabled={syncMode === 'disabled'}
                           onClick={() => setConfirmRemoveId(item.id)}
                         >
                           <Icon name="i-trash" />
@@ -381,29 +484,21 @@ export function WishlistView({
       {formOpen && (
         <WishlistFormModal
           initialItem={editingItem}
+          syncMode={syncMode}
           onClose={() => {
             setFormOpen(false);
             setEditingItem(null);
           }}
-          onSave={(payload) => {
-            if (editingItem) onUpdate(editingItem.id, payload);
-            else onAdd(payload);
-            setFormOpen(false);
-            setEditingItem(null);
+          onSave={async (payload) => {
+            const res = editingItem ? await onUpdate(editingItem.id, payload) : await onAdd(payload);
+            if (!res || res.ok !== false) {
+              setFormOpen(false);
+              setEditingItem(null);
+            }
+            return res;
           }}
-        />
-      )}
-
-      {sizeTarget && (
-        <SizeIntelligenceModal
-          product={sizeTarget}
-          result={sizeModalResult}
-          unit={sizeProfile.unit}
-          onClose={() => setSizeTarget(null)}
-          onGoToProfile={onGoToProfile}
         />
       )}
     </div>
   );
 }
-

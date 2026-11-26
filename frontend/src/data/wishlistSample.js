@@ -3,6 +3,53 @@
 
 export const CATEGORIES = ['Tops', 'Dresses', 'Trousers', 'Ethnic', 'Footwear', 'Outerwear'];
 
+const CATEGORY_TO_UI = {
+  top: 'Tops',
+  tops: 'Tops',
+  dress: 'Dresses',
+  dresses: 'Dresses',
+  trouser: 'Trousers',
+  trousers: 'Trousers',
+  saree: 'Ethnic',
+  sarees: 'Ethnic',
+  ethnic: 'Ethnic',
+  footwear: 'Footwear',
+  outerwear: 'Outerwear',
+};
+
+const CATEGORY_TO_BACKEND = {
+  Tops: 'tops',
+  Dresses: 'dress',
+  Trousers: 'trousers',
+  Ethnic: 'saree',
+  Footwear: 'footwear',
+  Outerwear: 'outerwear',
+};
+
+export function normalizeCategoryLabel(category = '') {
+  const key = String(category ?? '').trim().toLowerCase();
+  return CATEGORY_TO_UI[key] || (category ? category.charAt(0).toUpperCase() + category.slice(1) : 'Dresses');
+}
+
+export function toBackendCategory(category = '') {
+  return CATEGORY_TO_BACKEND[category] || String(category || 'dress').trim().toLowerCase();
+}
+
+export function resolveWishlistImage(item) {
+  const url = item?.image_url ?? item?.image ?? '';
+  if (url && !/https?:\/\/([^/]*\.)?example\.test\b/i.test(url)) return url;
+  const pid = item?.product_id ?? '';
+  if (pid === 'saanvi-blue-saree' || /saree/i.test(item?.product_name ?? item?.name ?? '')) return '/wishlist/saree-diwali.svg';
+  if (pid === 'northline-black-wrap' || /black/i.test(item?.product_name ?? item?.name ?? '')) return '/wishlist/dress-noir.svg';
+  if (pid === 'mira-block-heels') return '/wishlist/footwear-juttis.svg';
+  const cat = normalizeCategoryLabel(item?.category);
+  if (cat === 'Ethnic') return '/wishlist/saree-diwali.svg';
+  if (cat === 'Trousers') return '/wishlist/trousers-linen.svg';
+  if (cat === 'Tops') return '/wishlist/top-silk.svg';
+  if (cat === 'Footwear') return '/wishlist/footwear-juttis.svg';
+  return '/wishlist/dress-cobalt.svg';
+}
+
 export const OCCASION_SUGGESTIONS = ['Diwali', 'Wedding', 'Birthday', 'Party', 'Casual', 'Vacation', 'Festival'];
 
 export const SAMPLE_IMAGE_PRESETS = [
@@ -23,7 +70,9 @@ export const DEFAULT_SIZE_PROFILE = {
   height: 166,
   fit: 'regular', // 'slim' | 'regular' | 'oversized'
   unit: 'cm',     // 'cm' | 'in'
+  preferredCategories: ['Dresses', 'Tops'],
   masked: false,
+  encrypted: false,
   isSample: true,
 };
 
@@ -124,6 +173,34 @@ export const BRAND_SIZE_CHARTS = {
           { size: 'S', bust: [84, 88], shoulder: [36, 37.5], waist: [66, 70] },
           { size: 'M', bust: [89, 94], shoulder: [38, 39.5], waist: [71, 76] },
           { size: 'L', bust: [95, 100], shoulder: [40, 41.5], waist: [77, 82] },
+        ],
+      },
+    },
+  },
+  northline: {
+    brand: 'Northline',
+    note: 'Synthetic sample chart for Northline dresses (IN, cm).',
+    categories: {
+      Dresses: {
+        unit: 'cm',
+        sizes: [
+          { size: 'S', bust: [80, 86], waist: [62, 68], hips: [86, 92] },
+          { size: 'M', bust: [86, 92], waist: [68, 74], hips: [92, 98] },
+          { size: 'L', bust: [92, 98], waist: [74, 80], hips: [98, 104] },
+        ],
+      },
+    },
+  },
+  'saanvi studio': {
+    brand: 'Saanvi Studio',
+    note: 'Synthetic sample chart for Saanvi Studio ethnic & saree sets (IN, cm).',
+    categories: {
+      Ethnic: {
+        unit: 'cm',
+        sizes: [
+          { size: 'S', bust: [82, 88], waist: [64, 70], hips: [88, 94] },
+          { size: 'M', bust: [88, 94], waist: [70, 76], hips: [94, 100] },
+          { size: 'L', bust: [94, 100], waist: [76, 82], hips: [100, 106] },
         ],
       },
     },
@@ -265,6 +342,7 @@ export function createSampleOccasionEvents() {
 export function lookupBrandChart(brandName, category) {
   if (!brandName || !category) return null;
   const normalized = brandName.trim().toLowerCase();
+  const normalizedCategory = normalizeCategoryLabel(category);
   // Match exact or partial alias (e.g. "Aurelia Studio" -> "aurelia loom")
   const aliasMap = {
     'aurelia studio': 'aurelia loom',
@@ -275,16 +353,17 @@ export function lookupBrandChart(brandName, category) {
     'kora': 'kora atelier',
     'warp and line': 'warp & line',
     'veda': 'veda basics',
+    'saanvi': 'saanvi studio',
   };
   const key = BRAND_SIZE_CHARTS[normalized] ? normalized : aliasMap[normalized];
   const entry = key ? BRAND_SIZE_CHARTS[key] : null;
   if (!entry) return null;
-  const catChart = entry.categories[category];
+  const catChart = entry.categories[normalizedCategory] || entry.categories[category];
   if (!catChart) return null;
   return {
     brand: entry.brand,
     note: entry.note,
-    category,
+    category: normalizedCategory,
     ...catChart,
   };
 }

@@ -345,6 +345,7 @@ html[data-page="app"] .wl-reminder-main { display: grid; gap: var(--space-3xs); 
 html[data-page="app"] .wl-reminder-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); font-size: var(--app-sm); }
 html[data-page="app"] .wl-reminder-sub { font-size: var(--app-xs); color: var(--color-ink-2); }
 html[data-page="app"] .wl-reminder-actions { display: flex; align-items: center; gap: var(--space-xs); }
+html[data-page="app"] .wl-reminders-head-actions { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; }
 html[data-page="app"] .wl-day-pill {
   padding: 1px var(--space-xs); border-radius: var(--radius-pill);
   background: color-mix(in oklab, var(--yarn-calendar) 14%, var(--color-paper)); color: var(--color-signal);
@@ -423,6 +424,8 @@ html[data-page="app"] .wl-cal-chip { background: color-mix(in oklab, var(--yarn-
 html[data-page="app"] .wl-card-foot { display: flex; align-items: center; justify-content: space-between; font-size: var(--app-xs); color: var(--color-muted); padding-top: var(--space-2xs); }
 html[data-page="app"] .wl-ext-link { display: inline-flex; align-items: center; gap: 3px; color: var(--color-ink-2); text-decoration: none; }
 html[data-page="app"] .wl-ext-link:hover { color: var(--color-ink); text-decoration: underline; }
+html[data-page="app"] .wl-card.is-muted-card { opacity: 0.78; }
+html[data-page="app"] .wl-card-links { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; }
 html[data-page="app"] .wl-card-actions { display: flex; align-items: center; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--color-rule); }
 html[data-page="app"] .wl-find-size-btn { flex: 1; }
 html[data-page="app"] .wl-confirm-del { display: inline-flex; align-items: center; gap: var(--space-2xs); }

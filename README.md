@@ -3,10 +3,10 @@
 Weave answers one everyday question across the apps you use, shows the exact records behind every point, and drafts changes that only happen after you approve them. This is the wHACKiest 2026 prototype (Track 1: Make MCP Matter).
 
 ```
-Ask ──▶ Weave app ──▶ planner (Claude, or the offline script)
+Ask ──▶ Weave app ──▶ planner (NVIDIA NIM, or the offline script)
                           │  picks tools
                           ▼
-                     MCP client ──tools/list, tools/call──▶ MCP servers: Calendar · Notes · Tasks · Money
+                     MCP client ──tools/list, tools/call──▶ MCP servers: Calendar · Notes · Tasks · Money · Wishlist
                           │
              reads run straight away · writes are held as drafts
                           ▼
@@ -35,7 +35,7 @@ Weave/
 
 ## Run it
 
-Needs Node 22.5 or later. Wishlist, size profiles, and reminders use MongoDB Atlas through Mongoose. The UI in `frontend/` is built with React + Vite, and the Express server in `backend/` serves the built React app (`frontend/dist`) and `/api/*`. MongoDB must be reachable before the server starts; a failed connection prints an explicit error and the HTTP server is not started.
+Needs Node 22.5 or later. Wishlist, size profiles, and reminders use MongoDB (local MongoDB / Compass at `mongodb://127.0.0.1:27017/weave`, or MongoDB Atlas) through Mongoose. The UI in `frontend/` is built with React + Vite, and the Express server in `backend/` serves the built React app (`frontend/dist`) and `/api/*`. MongoDB must be reachable before the server starts; a failed connection prints an explicit error and the HTTP server is not started.
 
 ### 1. Install
 
@@ -66,12 +66,12 @@ Run `npm run dev` from the repo root for instant React HMR while talking to the 
 ### Planners
 
 - **Offline planner** (default when no key is found): a fixed script for the demo questions plus deterministic wishlist, occasion, and size-matching demonstrations. It makes the same real MCP calls and follows the same rules.
-- **Claude planner**: set a key, restart, and pick *Claude* in the top bar. Claude chooses which MCP tools to call and writes the cited answer.
+- **NVIDIA NIM planner**: paste your `NVIDIA_API_KEY` into `backend/.env`, restart, and pick *NVIDIA NIM* in the top bar. The LLM uses NVIDIA NIM OpenAI-compatible tool calling to pick MCP tools and write the cited answer.
 
 Still in `backend/`:
 
 ```bash
-cp backend/.env.example backend/.env   # then put your key in backend/.env (or: ant auth login)
+cp backend/.env.example backend/.env   # then set NVIDIA_API_KEY in backend/.env
 npm start
 ```
 
@@ -103,7 +103,7 @@ npm run smoke
 | Approval gate | **Real.** Any tool not marked `readOnlyHint: true` is held as a draft; it runs only after you approve, then Weave reads the record back before saying "Done". |
 | Wishlist and size intelligence | **Implemented with MongoDB Atlas persistence and synthetic charts.** Wishlist CRUD, occasion tags, a clearly labelled sample profile, deterministic brand/category charts, unit conversion, missing-measurement and between-size handling are available through the Wishlist & sizes MCP server. |
 | Occasion-aware reminders | **Implemented as a read-and-suggest workflow.** Upcoming records from Calendar are matched to wishlist occasion tags in configurable 30/14/7-day windows. Creating a Task or Calendar reminder remains approval-gated. Festival dates are not hardcoded. |
-| Claude planner | Built on the Anthropic SDK's tool runner with `claude-opus-5-5`. **Not tested against the live API on this machine** (no key was available). The offline path is fully tested. |
+| NVIDIA NIM planner | Uses OpenAI-compatible `/v1/chat/completions` tool calling (default `nvidia/nemotron-3.5-super-vl-120b-a12b`) via `NVIDIA_API_KEY`. The offline path is fully tested against local MongoDB and all 5 MCP servers. |
 | Email, fitness apps, travel, learning, home | **Planned.** Shown as planned in the app and not connected. |
 
 ## Demo script (about 2 minutes)
@@ -124,7 +124,7 @@ npm run smoke
 | `backend/mcp-servers/*.js` | Five MCP servers (`McpServer` + stdio). Tools carry MCP annotations: reads are `readOnlyHint: true`; wishlist/profile mutations, `create_task`, and `create_event` are not. |
 | `backend/src/hub.js` | Weave's MCP client. Spawns each server, discovers tools, calls them, and logs every message for the activity panel. |
 | `backend/src/run.js` | One question = one run. Reads register citable sources, writes become drafts, and the answer may only cite records that were actually read. |
-| `backend/src/agent-claude.js` | Claude planner: each MCP tool becomes a tool for the SDK's tool runner; write tools only create drafts. The final answer comes back through a strict `present_answer` tool. |
+| `backend/src/agent-nim.js` | NVIDIA NIM planner: exposes every connected MCP tool as an OpenAI-compatible function tool; write tools only create drafts. The final answer comes back through `present_answer` (or JSON fallback). |
 | `backend/src/agent-offline.js` | Offline planner for the core demo questions plus deterministic wishlist/occasion/size workflows. |
 | `backend/src/server.js` | Entry point (127.0.0.1 only): connects to MongoDB, starts the MCP apps, then starts the Express server with `app.listen()` and handles graceful shutdown. |
 | `backend/src/app.js` | Express app: `express.json()` (64 KB) and CORS middleware, the same-origin guard, static UI with SPA fallback, and a JSON error handler. |
@@ -153,28 +153,31 @@ Reminder reconciliation uses a unique `(wishlist_item_id, calendar_event_id, rem
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Enables the Claude planner (an `ant auth login` profile also works). |
-| `WEAVE_MODE` | `claude` if a key is found, else `offline` | Starting planner. |
-| `WEAVE_MODEL` | `claude-opus-5-5` | Model for the Claude planner. |
-| `WEAVE_EFFORT` | `medium` | `low`, `medium`, `high`, `xhigh` or `max`. |
+| `NVIDIA_API_KEY` | none | Enables the NVIDIA NIM planner (`build.nvidia.com` key). |
+| `NVIDIA_NIM_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Base URL for NVIDIA NIM OpenAI-compatible chat completions. |
+| `WEAVE_MODE` | `nim` if `NVIDIA_API_KEY` is found, else `offline` | Starting planner. |
+| `WEAVE_MODEL` | `nvidia/nemotron-3.5-super-vl-120b-a12b` | Model for the NVIDIA NIM planner. |
 | `WEAVE_TODAY` | today | Pin "today" (YYYY-MM-DD) for a repeatable demo. |
 | `WEAVE_STATEMENT_CSV` | `data/statement.csv` (relative to `backend/`) | Statement file for the Money server. |
-| `MONGODB_URI` | none | Required MongoDB Atlas connection string. |
+| `MONGODB_URI` | none | Required MongoDB connection string (`mongodb://127.0.0.1:27017/weave` for local Compass or Atlas URI). |
 | `MONGODB_DB_NAME` | URI-selected database | Optional database name passed to Mongoose. |
 | `WEAVE_PROFILE_ENCRYPTION_KEY` | none | Optional base64-encoded 32-byte AES-256-GCM key for size-profile encryption. |
 | `PORT` | `4321` | Server port. |
 
-Claude requests use server-side refusal fallbacks (`fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta), so if the model declines, the API retries on a fallback model. Remove those two fields in `backend/src/agent-claude.js` to turn this off.
+You can change the NVIDIA NIM model cleanly by setting `WEAVE_MODEL` in `backend/.env` (for example `nvidia/nemotron-3.5-super-vl-120b-a12b` or `nvidia/nemotron-3.5-lightning-30b-a3b`), or point `NVIDIA_NIM_BASE_URL` at a self-hosted NIM endpoint.
 
-### MongoDB Atlas setup
+### MongoDB setup (Local Compass or Atlas)
 
-1. Create an Atlas project and free/shared cluster.
-2. Create a database user with access to the Weave database.
-3. Add the development machine's IP address under Network Access (or use the project's controlled network policy).
-4. Copy `backend/.env.example` to `backend/.env` and set `MONGODB_URI` and optionally `MONGODB_DB_NAME`. Keep credentials URL-encoded and never commit `.env`.
-5. Start Weave with `npm start`. If the URI is missing or MongoDB cannot be reached, startup fails with an explicit error; no in-memory fallback is used.
+**Local MongoDB / Compass (configured in `backend/.env`):**
+1. Ensure local MongoDB Server is running (`mongodb://127.0.0.1:27017`) and open `mongodb://127.0.0.1:27017/weave` in MongoDB Compass to inspect collections.
+2. In `backend/.env`, set `MONGODB_URI=mongodb://127.0.0.1:27017/weave` and `MONGODB_DB_NAME=weave` (plus optional `WEAVE_PROFILE_ENCRYPTION_KEY`).
+3. Start Weave with `npm start` (or `npm run dev`).
 
-Mongoose creates the `wishlistitems`, `sizeprofiles`, and `reminders` collections and their indexes. Reminder statuses are `suggested`, `pending_approval`, `approved`, `dismissed`, `completed`, and `cancelled`. Reconciliation is on demand; there is no background notification scheduler.
+**MongoDB Atlas (optional cloud alternative):**
+1. Create an Atlas project, database user, and Network Access allowlist entry.
+2. Set `MONGODB_URI=mongodb+srv://...` in `backend/.env` and restart.
+
+Mongoose creates the `wishlistitems`, `sizeprofiles`, and `reminders` collections and their indexes cleanly in either local MongoDB or Atlas. Reminder statuses are `suggested`, `pending_approval`, `approved`, `dismissed`, `completed`, and `cancelled`. Reconciliation is on demand; there is no background notification scheduler.
 
 This phase does not automatically migrate an existing SQLite file into Atlas. Existing Atlas data is preserved and sample documents are inserted only into empty collections; any SQLite-to-Atlas migration should be an explicit, reviewed data operation.
 

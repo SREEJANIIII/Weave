@@ -3,6 +3,25 @@
 
 const UNIT_FACTORS = { cm: 1, inches: 2.54 };
 const MEASUREMENTS = ['bust', 'waist', 'hips', 'shoulder', 'inseam', 'height'];
+const CATEGORY_ALIASES = {
+  dresses: 'dress',
+  dress: 'dress',
+  ethnic: 'saree',
+  saree: 'saree',
+  sarees: 'saree',
+  tops: 'top',
+  top: 'top',
+  trousers: 'trousers',
+  trouser: 'trousers',
+  outerwear: 'outerwear',
+  footwear: 'footwear',
+};
+const FIT_BIAS_CM = { slim: -1.0, regular: 0, oversized: 2.0 };
+
+export function normaliseCategory(category = '') {
+  const key = String(category ?? '').trim().toLowerCase();
+  return CATEGORY_ALIASES[key] ?? key;
+}
 
 export function convert(value, from, to) {
   if (!Number.isFinite(value) || !UNIT_FACTORS[from] || !UNIT_FACTORS[to]) throw new Error('Unsupported measurement unit. Use cm or inches.');
@@ -19,22 +38,24 @@ function normaliseMeasurements(profile, unit = 'cm') {
  */
 export function matchSize(profile, chart, { category } = {}) {
   if (!profile || !chart) return { status: 'unavailable', reason: 'A size chart is unavailable.' };
-  if (category && chart.category.toLowerCase() !== category.toLowerCase()) return { status: 'category_mismatch', reason: `The chart is for ${chart.category}, not ${category}.` };
+  if (category && normaliseCategory(chart.category) !== normaliseCategory(category)) return { status: 'category_mismatch', reason: `The chart is for ${chart.category}, not ${category}.` };
   const measurements = normaliseMeasurements(profile, chart.unit);
   const missing = (chart.requiredMeasurements ?? Object.keys(chart.sizes[0]?.measurements ?? {})).filter((key) => measurements[key] == null);
   if (!chart.sizes?.length) return { status: 'unavailable', reason: 'The size chart has no size rows.' };
+  const biasInChartUnit = convert(FIT_BIAS_CM[profile.preferred_fit] ?? 0, 'cm', chart.unit);
   const scored = chart.sizes.map((row) => {
     const matched = [];
     const outside = [];
     let distance = 0;
     for (const [key, range] of Object.entries(row.measurements)) {
       if (measurements[key] == null) continue;
-      const value = measurements[key];
+      const rawValue = measurements[key];
+      const value = rawValue + biasInChartUnit;
       const [min, max] = range;
       if (value >= min && value <= max) matched.push(key);
       else {
         const gap = value < min ? min - value : value - max;
-        outside.push({ measurement: key, value, range: [min, max], gap: Number(gap.toFixed(2)) });
+        outside.push({ measurement: key, value: Number(rawValue.toFixed(2)), range: [min, max], gap: Number(gap.toFixed(2)) });
         distance += gap;
       }
     }

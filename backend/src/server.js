@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import { Hub } from './hub.js';
 import { ProposalStore } from './run.js';
-import { hasCredentials, MODEL, EFFORT } from './agent-claude.js';
+import { hasCredentials, MODEL } from './agent-nim.js';
 import { connectDatabase, closeDatabase } from '../db/database.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -14,17 +14,17 @@ const HOST = '127.0.0.1';
 const hub = new Hub(root);
 const proposals = new ProposalStore();
 const state = {
-  mode: ['claude', 'offline'].includes(process.env.WEAVE_MODE) ? process.env.WEAVE_MODE : hasCredentials() ? 'claude' : 'offline',
+  mode: ['nim', 'offline'].includes(process.env.WEAVE_MODE) ? process.env.WEAVE_MODE : hasCredentials() ? 'nim' : 'offline',
 };
 
 async function main() {
   try {
     await connectDatabase();
-    console.log('  Database MongoDB Atlas connected');
+    console.log('  Database  MongoDB connected');
   } catch (err) {
     console.error('\n  Weave cannot start: MongoDB connection failed.');
     console.error(`  ${err.message}`);
-    console.error('  Configure MONGODB_URI (and optionally MONGODB_DB_NAME) in backend/.env, then restart.\n');
+    console.error('  Configure MONGODB_URI (e.g. mongodb://127.0.0.1:27017/weave) in backend/.env, then restart.\n');
     process.exit(1);
   }
 
@@ -41,7 +41,7 @@ async function main() {
   const server = app.listen(PORT, HOST, () => {
     const apps = hub.status().map((a) => `${a.id} (${a.status === 'connected' ? `${a.tools.length} tools` : a.status})`).join(', ');
     console.log(`\n  Weave prototype  →  http://localhost:${PORT}\n`);
-    console.log(`  Planner   ${state.mode === 'claude' ? `Claude (${MODEL}, effort ${EFFORT})` : 'Offline script'}${hasCredentials() ? '' : '  ·  no Anthropic credentials found'}`);
+    console.log(`  Planner   ${state.mode === 'nim' ? `NVIDIA NIM (${MODEL})` : 'Offline script'}${hasCredentials() ? '' : '  ·  no NVIDIA NIM API key found'}`);
     console.log(`  MCP apps  ${apps}\n`);
   });
   server.on('error', (err) => {

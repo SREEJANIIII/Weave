@@ -1,6 +1,114 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Icon } from '../Icons';
+import { normalizeCategoryLabel, resolveWishlistImage } from '../../data/wishlistSample';
 import { EDITABLE, YARN, describeRecord, fmtArgs, fmtDate, listJoin, plural } from '../../lib/formatters';
+import { recommendSize } from '../../lib/sizeEngine';
+
+const WIDE_EDIT_FIELDS = new Set(['title', 'product_name', 'product_url', 'image_url', 'notes', 'preferred_categories']);
+const NUMERIC_EDIT_FIELDS = new Set(['bust', 'waist', 'hips', 'shoulder', 'inseam', 'height', 'price']);
+const REQUIRED_EDIT_FIELDS = new Set(['title', 'product_name', 'brand']);
+
+function describeDraft(proposal) {
+  const args = proposal.args ?? {};
+  switch (proposal.tool) {
+    case 'create_event':
+      return {
+        title: args.title || 'Add calendar event',
+        meta: [
+          ['Date', fmtDate(args.date)],
+          ['Time', `${args.start} to ${args.end}`],
+          args.notes && ['Notes', args.notes],
+        ],
+        doneText: 'Added to Calendar and read back to confirm.',
+      };
+    case 'create_task':
+      return {
+        title: args.title || 'Add task',
+        meta: [
+          ['Due', args.due ? fmtDate(args.due) : 'No date'],
+          args.list && ['List', args.list],
+        ],
+        doneText: 'Added to Tasks and read back to confirm.',
+      };
+    case 'save_wishlist_item':
+      return {
+        title: args.product_name || 'Save product to Wishlist',
+        meta: [
+          args.brand && ['Brand', args.brand],
+          args.category && ['Category', normalizeCategoryLabel(args.category)],
+          args.occasion && ['Occasion', args.occasion],
+          args.price !== undefined && ['Price', `₹${args.price}`],
+          args.notes && ['Notes', args.notes],
+        ],
+        doneText: 'Saved to Wishlist and confirmed in MongoDB.',
+      };
+    case 'update_wishlist_item':
+      return {
+        title: args.product_name || `Update saved item (${args.id ?? 'wishlist'})`,
+        meta: [
+          args.brand && ['Brand', args.brand],
+          args.occasion && ['Occasion', args.occasion],
+          args.status && ['Status', args.status],
+          args.notes && ['Notes', args.notes],
+        ],
+        doneText: 'Updated wishlist product and read back to confirm.',
+      };
+    case 'delete_wishlist_item':
+      return {
+        title: proposal.result?.product_name || `Remove wishlist product (${args.id ?? ''})`,
+        meta: [['Action', 'Delete from persistent Wishlist'], args.id && ['Item ID', args.id]],
+        doneText: 'Removed from persistent Wishlist.',
+      };
+    case 'update_size_profile':
+      return {
+        title: 'Update personal Size Profile',
+        meta: [
+          args.unit && ['Unit', args.unit],
+          args.preferred_fit && ['Preferred fit', args.preferred_fit],
+          Array.isArray(args.preferred_categories) && args.preferred_categories.length > 0 && [
+            'Categories',
+            args.preferred_categories.join(', '),
+          ],
+          ['Privacy', 'Sensitive measurements encrypted/redacted cleanly'],
+        ],
+        doneText: 'Updated personal Size Profile and verified persistence.',
+      };
+    case 'delete_size_profile':
+      return {
+        title: 'Delete stored personal Size Profile',
+        meta: [['Scope', 'Permanently clears saved measurements from MongoDB']],
+        doneText: 'Deleted stored personal Size Profile.',
+      };
+    case 'reconcile_reminders':
+      return {
+        title: `Sync ${plural((args.items ?? []).length, 'saved item')} with ${plural((args.events ?? []).length, 'upcoming occasion')}`,
+        meta: [
+          ['Reminder windows', `${(args.windows ?? [30, 14, 7]).join('d, ')}d`],
+          (args.events ?? []).length > 0 && [
+            'Occasions',
+            args.events.map((e) => `${e.title} (${fmtDate(e.date)})`).join(', '),
+          ],
+        ],
+        doneText: `Synced persistent occasion reminders${
+          proposal.result?.count !== undefined ? ` (${plural(proposal.result.count, 'suggested reminder')})` : ''
+        }.`,
+      };
+    case 'dismiss_reminder':
+      return {
+        title: `Dismiss occasion reminder (${args.id ?? ''})`,
+        meta: [['Behavior', 'Keeps this reminder dismissed on future syncs']],
+        doneText: 'Dismissed occasion reminder.',
+      };
+    default:
+      return {
+        title: args.title || args.product_name || proposal.toolTitle || 'Draft action',
+        meta: Object.entries(args)
+          .slice(0, 4)
+          .map(([k, v]) => [k.replace(/_/g, ' '), Array.isArray(v) ? `${v.length} entries` : String(v)]),
+        doneText: `Completed in ${proposal.app} and verified.`,
+      };
+  }
+}
 
 function CiteButton({ n, source, litN, onLight, onOpenSource }) {
   if (!source) return null;
@@ -32,23 +140,14 @@ function DraftCard({ proposal, sourceMap, nFor, litN, onLight, onOpenSource, onA
   const yarn = YARN[proposal.server] ?? proposal.server;
   const args = proposal.args ?? {};
   const isEditing = editing && proposal.status === 'pending';
-
-  const meta =
-    proposal.tool === 'create_event'
-      ? [
-          ['Date', fmtDate(args.date)],
-          ['Time', `${args.start} to ${args.end}`],
-          args.notes && ['Notes', args.notes],
-        ]
-      : [
-          ['Due', args.due ? fmtDate(args.due) : 'No date'],
-          args.list && ['List', args.list],
-        ];
+  const editableFields = EDITABLE[proposal.tool] ?? [];
+  const draftDisplay = describeDraft(proposal);
 
   const startEdit = () => {
     const initial = {};
-    for (const [key] of EDITABLE[proposal.tool] ?? []) {
-      initial[key] = args[key] ?? '';
+    for (const [key] of editableFields) {
+      const val = args[key];
+      initial[key] = Array.isArray(val) ? val.join(', ') : (val ?? '');
     }
     setFormValues(initial);
     setEditing(true);
@@ -64,7 +163,23 @@ function DraftCard({ proposal, sourceMap, nFor, litN, onLight, onOpenSource, onA
   const submitEdit = (e) => {
     e.preventDefault();
     setEditing(false);
-    onApprove(proposal, formValues);
+    const normalizedChanges = {};
+    for (const [key] of editableFields) {
+      const raw = formValues[key];
+      if (raw === '' || raw === undefined || raw === null) continue;
+      if (key === 'preferred_categories') {
+        normalizedChanges[key] = String(raw)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      } else if (NUMERIC_EDIT_FIELDS.has(key)) {
+        const n = Number(raw);
+        if (Number.isFinite(n) && n > 0) normalizedChanges[key] = n;
+      } else {
+        normalizedChanges[key] = raw;
+      }
+    }
+    onApprove(proposal, normalizedChanges);
   };
 
   const cardCls = [
@@ -81,9 +196,9 @@ function DraftCard({ proposal, sourceMap, nFor, litN, onLight, onOpenSource, onA
         <span className="swatch" data-yarn={yarn} aria-hidden="true" />
         {`${proposal.toolTitle} in ${proposal.app}`}
       </p>
-      <p className="draft-title">{args.title}</p>
+      <p className="draft-title">{draftDisplay.title}</p>
       <dl className="draft-meta">
-        {meta.filter(Boolean).map(([k, v]) => (
+        {draftDisplay.meta.filter(Boolean).map(([k, v]) => (
           <div key={k}>
             <dt>{k}</dt>
             <dd>{v}</dd>
@@ -111,16 +226,17 @@ function DraftCard({ proposal, sourceMap, nFor, litN, onLight, onOpenSource, onA
 
       {isEditing ? (
         <form className="draft-edit" onSubmit={submitEdit}>
-          {(EDITABLE[proposal.tool] ?? []).map(([key, type, label], idx) => (
-            <div key={key} className={`field${key === 'title' ? ' field-wide' : ''}`}>
+          {editableFields.map(([key, type, label], idx) => (
+            <div key={key} className={`field${WIDE_EDIT_FIELDS.has(key) ? ' field-wide' : ''}`}>
               <label htmlFor={`edit-${proposal.id}-${key}`}>{label}</label>
               <input
                 ref={idx === 0 ? firstEditRef : undefined}
                 id={`edit-${proposal.id}-${key}`}
                 name={key}
                 type={type}
-                value={formValues[key] ?? args[key] ?? ''}
-                required={key === 'title'}
+                step={type === 'number' ? 'any' : undefined}
+                value={formValues[key] ?? ''}
+                required={REQUIRED_EDIT_FIELDS.has(key)}
                 autoComplete="off"
                 onChange={(e) => setFormValues((prev) => ({ ...prev, [key]: e.target.value }))}
               />
@@ -147,10 +263,12 @@ function DraftCard({ proposal, sourceMap, nFor, litN, onLight, onOpenSource, onA
             <Icon name="i-check" />
             Approve
           </button>
-          <button className="btn btn-quiet" type="button" onClick={startEdit}>
-            <Icon name="i-pencil" />
-            Edit first
-          </button>
+          {editableFields.length > 0 && (
+            <button className="btn btn-quiet" type="button" onClick={startEdit}>
+              <Icon name="i-pencil" />
+              Edit first
+            </button>
+          )}
           <button className="btn btn-link" type="button" onClick={() => onDismiss(proposal)}>
             Dismiss
           </button>
@@ -158,13 +276,13 @@ function DraftCard({ proposal, sourceMap, nFor, litN, onLight, onOpenSource, onA
       ) : proposal.status === 'running' ? (
         <p className="draft-result is-muted">
           <span className="spinner" aria-hidden="true" />
-          {`Adding to ${proposal.app}, then reading it back to confirm`}
+          {`Running in ${proposal.app}, then reading it back to confirm`}
         </p>
       ) : proposal.status === 'done' ? (
         <p className="draft-result is-ok" role="status">
           <Icon name="i-check" />
           <span>
-            {`Added to ${proposal.app} and read back to confirm.${
+            {`${draftDisplay.doneText}${
               (proposal.conflicts ?? []).length
                 ? ` It overlaps ${listJoin(proposal.conflicts.map((c) => `“${c.title}” (${c.start} to ${c.end})`))}.`
                 : ''
@@ -192,7 +310,7 @@ function DraftCard({ proposal, sourceMap, nFor, litN, onLight, onOpenSource, onA
 }
 
 export const RunView = React.forwardRef(function RunView(
-  { run, busy, litN, onLight, onOpenSource, onApprove, onDismiss, onInspectSize, onOpenWishlist },
+  { run, busy, litN, sizeProfile, onLight, onOpenSource, onApprove, onDismiss, onInspectSize, onOpenWishlist },
   ref,
 ) {
   const [callsOpenOverride, setCallsOpenOverride] = useState(null);
@@ -219,17 +337,43 @@ export const RunView = React.forwardRef(function RunView(
     return (id) => map.get(id) ?? null;
   }, [run?.answer]);
 
+  const citedProducts = useMemo(() => {
+    if (run?.highlightedProducts?.length) return run.highlightedProducts;
+    if (!run?.answer?.sources?.length) return [];
+    const seen = new Set();
+    const out = [];
+    for (const s of run.answer.sources) {
+      if (s.record?.kind !== 'wishlist_item' || seen.has(s.record.id)) continue;
+      seen.add(s.record.id);
+      const item = {
+        id: s.record.id,
+        product_id: s.record.product_id ?? null,
+        name: s.record.product_name ?? s.record.title ?? s.record.id,
+        brand: s.record.brand ?? '',
+        category: normalizeCategoryLabel(s.record.category),
+        rawCategory: s.record.category ?? '',
+        occasion: s.record.occasion ?? '',
+        url: s.record.product_url ?? '',
+        image: resolveWishlistImage(s.record),
+        notes: s.record.notes ?? '',
+        status: s.record.status ?? 'saved',
+      };
+      out.push({ item, rec: recommendSize(sizeProfile, item) });
+    }
+    return out;
+  }, [run, sizeProfile]);
+
   if (!run) {
     return <section ref={ref} className="run" id="run" aria-live="polite" aria-busy="false" hidden />;
   }
 
   const drafts = [];
   let k = 0;
-  for (const s of run.steps) {
-    drafts.push(s.kind === 'write' ? run.proposals[k++] ?? null : null);
+  for (const s of run.steps ?? []) {
+    drafts.push(s.kind === 'write' ? run.proposals?.[k++] ?? null : null);
   }
 
-  const reads = run.steps.filter((s) => s.kind === 'read');
+  const reads = (run.steps ?? []).filter((s) => s.kind === 'read');
   const pending = run.proposals.filter((p) => p.status === 'pending').length;
 
   let statusContent;
@@ -365,16 +509,16 @@ export const RunView = React.forwardRef(function RunView(
       {run.answer && (
         <div className="answer">
           <h2 className="answer-head">{run.answer.headline || 'Here is what I found.'}</h2>
-          {run.answer.sections.map((sec) => (
-            <div key={sec.title} className="answer-section">
+          {(run.answer.sections ?? []).map((sec, secIdx) => (
+            <div key={`${sec.title || 'sec'}-${secIdx}`} className="answer-section">
               <h3>{sec.title}</h3>
               <ul className="items">
-                {sec.items.map((it, idx) => (
+                {(sec.items ?? []).map((it, idx) => (
                   <li key={idx} className="item">
                     <span className="item-text">{it.text}</span>
                     {it.detail ? <span className="item-detail">{it.detail}</span> : null}
                     <span className="cites">
-                      {it.sourceIds.map((id) => {
+                      {(it.sourceIds ?? []).map((id) => {
                         const n = nFor(id);
                         return n ? (
                           <CiteButton
@@ -393,9 +537,9 @@ export const RunView = React.forwardRef(function RunView(
               </ul>
             </div>
           ))}
-          {run.answer.caveats.length > 0 && (
+          {(run.answer.caveats ?? []).length > 0 && (
             <div className="caveats">
-              {run.answer.caveats.map((c, i) => (
+              {(run.answer.caveats ?? []).map((c, i) => (
                 <p key={i}>
                   <Icon name="i-alert" />
                   <span>{c}</span>
@@ -404,10 +548,10 @@ export const RunView = React.forwardRef(function RunView(
             </div>
           )}
           <p className="stats">
-            {`${plural(run.answer.stats.reads, 'MCP read')} in ${run.answer.stats.ms} ms. Planner: ${
-              run.answer.stats.mode === 'claude'
-                ? `Claude (${run.answer.stats.model})`
-                : run.answer.stats.mode === 'local-wishlist'
+            {`${plural(run.answer.stats?.reads ?? 0, 'MCP read')} in ${run.answer.stats?.ms ?? 0} ms. Planner: ${
+              run.answer.stats?.mode === 'nim'
+                ? `NVIDIA NIM (${run.answer.stats?.model})`
+                : run.answer.stats?.mode === 'local-wishlist'
                   ? 'local Wishlist & Size Intelligence (sample data)'
                   : 'offline script'
             }.`}
@@ -415,7 +559,7 @@ export const RunView = React.forwardRef(function RunView(
         </div>
       )}
 
-      {run.highlightedProducts?.length > 0 && (
+      {citedProducts.length > 0 && (
         <div className="wl-inline-results" aria-label="Matched wishlist items and size intelligence">
           <div className="wl-inline-head">
             <h3>Matched Wishlist &amp; Size Intelligence</h3>
@@ -426,11 +570,11 @@ export const RunView = React.forwardRef(function RunView(
             )}
           </div>
           <div className="wl-inline-grid">
-            {run.highlightedProducts.map(({ item, rec }) => (
+            {citedProducts.map(({ item, rec }) => (
               <div key={item.id} className="wl-inline-card" data-yarn="wishlist">
                 <img src={item.image} alt="" className="wl-inline-thumb" />
                 <div className="wl-inline-info">
-                  <span className="wl-inline-brand">{item.brand} · {item.occasion}</span>
+                  <span className="wl-inline-brand">{item.brand}{item.occasion ? ` · ${item.occasion}` : ''}</span>
                   <strong>{item.name}</strong>
                   <span className={`wl-size-chip is-${rec.status}`}>
                     {rec.recommendedSize

@@ -10,18 +10,18 @@ export function AppTopBar({ status, busy, offline, reminderCount = 0, onSetMode,
   const options = status
     ? [
         {
-          id: 'claude',
-          label: 'Claude',
-          disabled: !status.planners.claude.credentials,
-          title: !status.planners.claude.credentials
-            ? 'No Anthropic API key found. Set ANTHROPIC_API_KEY and restart the server.'
-            : 'Plan with Claude',
+          id: 'nim',
+          label: 'NVIDIA NIM',
+          disabled: !status.planners?.nim?.credentials,
+          title: !status.planners?.nim?.credentials
+            ? 'No NVIDIA NIM API key found. Set NVIDIA_API_KEY in backend/.env and restart the server.'
+            : `Plan with NVIDIA NIM (${status.planners?.nim?.model ?? ''})`,
         },
         {
           id: 'offline',
           label: 'Offline',
           disabled: false,
-          title: 'Offline script: real MCP calls, hand-written reasoning for the two example questions',
+          title: 'Offline script: real MCP calls, hand-written reasoning for demo and wishlist questions',
         },
       ]
     : [];

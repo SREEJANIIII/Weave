@@ -59,7 +59,7 @@ export async function runOffline(run) {
   return run.finish({
     headline: 'Offline mode can only answer the two demo questions.',
     sections: [{ title: 'Try one of these', items: DEMO_QUESTIONS.map((text) => ({ text, detail: '', source_ids: [] })) }],
-    caveats: ['Switch the planner to Claude (top right) to ask anything across your connected apps.'],
+    caveats: ['Switch the planner to NVIDIA NIM (top right) to ask anything across your connected apps.'],
   });
 }
 
@@ -98,13 +98,19 @@ async function wishlistAndOccasions(run) {
   }
 
   if (/size|fit|measurements?/.test(q)) {
-    const target = saved[0];
-    if (target) {
+    const catMatch = saved.filter((x) => q.includes(x.category.toLowerCase()) || q.includes(x.brand.toLowerCase()) || q.includes(x.product_name.toLowerCase()));
+    const targets = catMatch.length ? catMatch : (/outfits|all|saved|which of/.test(q) && !occasion ? saved.slice(0, 6) : saved.slice(0, 1));
+    const sizeItems = [];
+    for (const target of targets) {
       const match = await run.read('wishlist', 'match_product_size', { item_id: target.id });
       const result = match.raw?.match;
-      if (result?.status === 'matched') sections.push({ title: 'Measurement-based size recommendation', items: [{ text: `${target.product_name}: consider ${result.recommendation}.`, detail: `${result.explanation} Confidence: ${result.confidence}. ${result.disclaimer}`, source_ids: [`wishlist:${target.id}`, ...Object.keys(match.raw ?? {}).filter((k) => k === 'match').map(() => `wishlist:${target.id}`)] }] });
-      else sections.push({ title: 'Size recommendation', items: [{ text: 'A size recommendation is unavailable for this saved product.', detail: result?.reason ?? 'No matching chart was found.', source_ids: [`wishlist:${target.id}`] }] });
+      if (result?.status === 'matched') {
+        sizeItems.push({ text: `${target.product_name} (${target.brand}): consider ${result.recommendation}.`, detail: `${result.explanation} Confidence: ${result.confidence}. ${result.disclaimer}`, source_ids: [`wishlist:${target.id}`] });
+      } else {
+        sizeItems.push({ text: `${target.product_name} (${target.brand}): no verified size recommendation available.`, detail: result?.reason ?? match.raw?.reason ?? 'No matching chart was found.', source_ids: [`wishlist:${target.id}`] });
+      }
     }
+    if (sizeItems.length) sections.push({ title: 'Measurement-based size recommendations', items: sizeItems });
   }
   const headline = items.length ? `I found ${items.length} saved product${items.length === 1 ? '' : 's'} relevant to your question.` : occasion ? `I couldn't find saved products for ${occasion}.` : 'Your wishlist is empty.';
   return { headline, sections, caveats: ['Wishlist and size charts are sample data; product platforms are not connected.', ...(events.length ? [] : ['No matching upcoming calendar event was found in the requested window.'])] };

@@ -9,14 +9,18 @@ import {
 
 const KNOWN_BRANDS = Object.values(BRAND_SIZE_CHARTS).map((b) => b.brand);
 
-export function WishlistFormModal({ initialItem, onSave, onClose }) {
+export function WishlistFormModal({ initialItem, syncMode = 'local', onSave, onClose }) {
   const [name, setName] = useState(initialItem?.name ?? '');
   const [brand, setBrand] = useState(initialItem?.brand ?? '');
   const [category, setCategory] = useState(initialItem?.category ?? 'Dresses');
   const [occasion, setOccasion] = useState(initialItem?.occasion ?? 'Diwali');
   const [url, setUrl] = useState(initialItem?.url ?? '');
-  const [image, setImage] = useState(initialItem?.image ?? SAMPLE_IMAGE_PRESETS[0].value);
+  const [image, setImage] = useState(initialItem?.rawImage || initialItem?.image || SAMPLE_IMAGE_PRESETS[0].value);
+  const [price, setPrice] = useState(initialItem?.price ?? '');
+  const [status, setStatus] = useState(initialItem?.status ?? 'saved');
   const [notes, setNotes] = useState(initialItem?.notes ?? '');
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     const onKey = (e) => {
@@ -26,18 +30,30 @@ export function WishlistFormModal({ initialItem, onSave, onClose }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim() || !brand.trim()) return;
-    onSave({
+    if (syncMode === 'backend' && !url.trim()) {
+      setFormError('Product URL (https://...) is required to persist to MongoDB.');
+      return;
+    }
+    setSaving(true);
+    setFormError('');
+    const result = await onSave({
       name: name.trim(),
       brand: brand.trim(),
       category,
       occasion: occasion.trim() || 'Casual',
       url: url.trim(),
       image: image.trim() || SAMPLE_IMAGE_PRESETS[0].value,
+      price: price !== '' && price !== null ? Number(price) : undefined,
+      status: initialItem ? status : 'saved',
       notes: notes.trim(),
     });
+    setSaving(false);
+    if (result && result.ok === false) {
+      setFormError(result.error || 'Could not save product.');
+    }
   };
 
   return (
@@ -114,15 +130,40 @@ export function WishlistFormModal({ initialItem, onSave, onClose }) {
             </div>
 
             <div className="field">
-              <label htmlFor="wl-url">Product URL</label>
+              <label htmlFor="wl-url">Product URL{syncMode === 'backend' ? ' *' : ''}</label>
               <input
                 id="wl-url"
                 type="url"
+                required={syncMode === 'backend'}
                 placeholder="https://..."
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
             </div>
+
+            <div className="field">
+              <label htmlFor="wl-price">Price (INR, optional)</label>
+              <input
+                id="wl-price"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="e.g. 4200"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </div>
+
+            {initialItem && (
+              <div className="field">
+                <label htmlFor="wl-status">Status</label>
+                <select id="wl-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="saved">Saved</option>
+                  <option value="purchased">Purchased</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+            )}
 
             <div className="field wl-span-2">
               <label htmlFor="wl-image">Product image URL (or pick a sample preview)</label>
@@ -159,13 +200,20 @@ export function WishlistFormModal({ initialItem, onSave, onClose }) {
             </div>
           </div>
 
+          {formError && (
+            <p className="draft-result is-bad" role="alert">
+              <Icon name="i-alert" />
+              <span>{formError}</span>
+            </p>
+          )}
+
           <div className="wl-modal-foot">
-            <button className="btn btn-link" type="button" onClick={onClose}>
+            <button className="btn btn-link" type="button" onClick={onClose} disabled={saving}>
               Cancel
             </button>
-            <button className="btn btn-primary" type="submit">
+            <button className="btn btn-primary" type="submit" disabled={saving}>
               <Icon name="i-check" />
-              {initialItem ? 'Save changes' : 'Save to Wishlist'}
+              {saving ? 'Saving...' : initialItem ? 'Save changes' : 'Save to Wishlist'}
             </button>
           </div>
         </form>

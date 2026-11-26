@@ -9,7 +9,6 @@ import { SizeProfileView } from '../components/profile/SizeProfileView';
 import { SizeIntelligenceModal } from '../components/wishlist/SizeIntelligenceModal';
 import { SHORT } from '../lib/formatters';
 import { matchOccasions } from '../lib/occasionMatcher';
-import { recommendSize } from '../lib/sizeEngine';
 import { buildWishlistRunResponse, isWishlistQuery } from '../lib/wishlistContextQA';
 import { useWishlistStore } from '../hooks/useWishlistStore';
 import { usePageMeta } from '../hooks/usePageSetup';
@@ -69,27 +68,50 @@ export function WorkspacePage() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastOn, setToastOn] = useState(false);
   const [inspectedProduct, setInspectedProduct] = useState(null);
+  const [inspectedResult, setInspectedResult] = useState(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
+
+  const wishlistEnabled = useMemo(
+    () => Boolean(status?.apps?.find((a) => a.id === 'wishlist')?.enabled && status?.apps?.find((a) => a.id === 'wishlist')?.status === 'connected'),
+    [status],
+  );
+  const calendarEnabled = useMemo(
+    () => Boolean(status?.apps?.find((a) => a.id === 'calendar')?.enabled && status?.apps?.find((a) => a.id === 'calendar')?.status === 'connected'),
+    [status],
+  );
 
   const {
+    syncMode,
+    syncing,
+    profileDeleted,
     wishlist,
     sizeProfile,
     reminderPrefs,
+    backendReminders,
     occasions,
+    refreshAll,
     addItem,
     updateItem,
     removeItem,
     saveProfile,
     clearProfileMeasurements,
+    deleteProfile,
+    matchSizeForProduct,
     updateReminderPrefs,
+    reconcileReminders,
     dismissReminder,
     approveReminderEvent,
     addOccasionEvent,
     resetWishlistDemo,
-  } = useWishlistStore();
+  } = useWishlistStore({
+    backendOnline: !offline && Boolean(status),
+    wishlistEnabled,
+    calendarEnabled,
+  });
 
   const activeReminderCount = useMemo(
-    () => matchOccasions(wishlist, occasions, reminderPrefs).filter((m) => m.inWindow && !m.dismissed).length,
-    [wishlist, occasions, reminderPrefs],
+    () => matchOccasions(wishlist, occasions, reminderPrefs, status?.today, backendReminders).filter((m) => m.inWindow && !m.dismissed).length,
+    [wishlist, occasions, reminderPrefs, status?.today, backendReminders],
   );
 
   const textareaRef = useRef(null);
@@ -159,8 +181,8 @@ export function WorkspacePage() {
       const q = rawQ.trim();
       if (!q || busy) return;
 
-      // Local Smart Wishlist & Size Intelligence contextual Q&A (works both offline & alongside backend)
-      if (isWishlistQuery(q, wishlist)) {
+      // Local Smart Wishlist & Size Intelligence fallback ONLY when the backend server is offline
+      if (offline && isWishlistQuery(q, wishlist)) {
         const seq = ++runSeqRef.current;
         setLitN(null);
         const localRun = buildWishlistRunResponse({
@@ -296,6 +318,7 @@ export function WorkspacePage() {
       if (r.ok) {
         setStatus(r.data);
         loadActivity();
+        await refreshAll();
       } else {
         showToast(r.data.error ?? "Couldn't reset the backend MCP servers.");
       }
@@ -336,8 +359,12 @@ export function WorkspacePage() {
     }
     updateProposal(p.id, { status: 'running' });
     const r = await api(`/api/proposals/${encodeURIComponent(p.id)}/approve`, { changes });
-    if (r.data.proposal) updateProposal(p.id, r.data.proposal);
-    else {
+    if (r.data.proposal) {
+      updateProposal(p.id, r.data.proposal);
+      if (r.data.proposal.status === 'done' && (p.server === 'wishlist' || p.server === 'calendar')) {
+        refreshAll();
+      }
+    } else {
       updateProposal(p.id, { status: 'pending' });
       showToast(r.data.error ?? "Couldn't approve that draft.");
     }
@@ -384,19 +411,39 @@ export function WorkspacePage() {
     [selectTab],
   );
 
+  const handleInspectSize = useCallback(
+    async (item) => {
+      setInspectedProduct(item);
+      setInspectedResult(null);
+      setInspectLoading(syncMode === 'backend');
+      const result = await matchSizeForProduct(item);
+      setInspectedResult(result);
+      setInspectLoading(false);
+    },
+    [syncMode, matchSizeForProduct],
+  );
+
+  const runAction = useCallback(
+    async (promise, errFallback) => {
+      const res = await promise;
+      if (res && res.ok === false) showToast(res.error || errFallback);
+      else loadActivity();
+      return res;
+    },
+    [loadActivity, showToast],
+  );
+
   const hour = status?.hour ?? new Date().getHours();
   const greeting = hour < 12 ? 'Good morning.' : hour < 18 ? 'Good afternoon.' : 'Good evening.';
   const askSub = offline
-    ? 'Wishlist & Size Intelligence questions run directly on local sample data. Start the server (npm start) for live MCP tools across Calendar, Notes, Tasks and Money.'
+    ? 'Wishlist & Size Intelligence questions run on local browser sample data. Start the server (npm start) for MongoDB persistence and live MCP tools.'
     : !status
       ? 'Weave reads only what a question needs, cites every record, and holds changes for your\u00a0OK.'
       : status.mode === 'offline'
-        ? `Ask about your day or your Smart Wishlist & Size Profile using sample data.${
-            status.planners.claude.credentials ? ' Switch to Claude to ask anything.' : ' Add an Anthropic API key to ask open-ended MCP questions.'
+        ? `Ask about your day or your Smart Wishlist & Size Profile using MCP servers (${wishlistEnabled ? 'MongoDB connected' : 'Wishlist switched off'}).${
+            status.planners?.nim?.credentials ? ' Switch to NVIDIA NIM to ask anything.' : ' Add NVIDIA_API_KEY in backend/.env to ask open-ended MCP questions.'
           }`
-        : 'Claude plans which MCP tools to call, cites every record it reads, and holds changes for your OK.';
-
-  const inspectedResult = inspectedProduct ? recommendSize(sizeProfile, inspectedProduct) : null;
+        : `NVIDIA NIM (${status.planners?.nim?.model ?? ''}) plans which MCP tools to call across all 5 apps, cites every record it reads, and holds changes for your OK.`;
 
   return (
     <>
@@ -418,10 +465,17 @@ export function WorkspacePage() {
             sizeProfile={sizeProfile}
             occasions={occasions}
             reminderPrefs={reminderPrefs}
-            onAdd={addItem}
-            onUpdate={updateItem}
-            onRemove={removeItem}
-            onDismissReminder={dismissReminder}
+            backendReminders={backendReminders}
+            syncMode={syncMode}
+            calendarEnabled={calendarEnabled}
+            syncing={syncing}
+            serverToday={status?.today}
+            onAdd={(item) => runAction(addItem(item), 'Could not add wishlist item.')}
+            onUpdate={(id, patch) => runAction(updateItem(id, patch), 'Could not update item.')}
+            onRemove={(id) => runAction(removeItem(id), 'Could not remove item.')}
+            onDismissReminder={(eventId, remIds) => runAction(dismissReminder(eventId, remIds), 'Could not dismiss reminder.')}
+            onReconcileReminders={() => runAction(reconcileReminders(), 'Could not sync reminders.')}
+            onInspectSize={handleInspectSize}
             onGoToProfile={() => navigate('/app/size-profile')}
           />
         </main>
@@ -432,9 +486,16 @@ export function WorkspacePage() {
             wishlist={wishlist}
             occasions={occasions}
             reminderPrefs={reminderPrefs}
-            onSaveProfile={saveProfile}
-            onClearProfile={clearProfileMeasurements}
+            backendReminders={backendReminders}
+            syncMode={syncMode}
+            calendarEnabled={calendarEnabled}
+            profileDeleted={profileDeleted}
+            serverToday={status?.today}
+            onSaveProfile={(p) => runAction(saveProfile(p), 'Could not save size profile.')}
+            onClearProfile={() => runAction(clearProfileMeasurements(), 'Could not clear measurements.')}
+            onDeleteProfile={() => runAction(deleteProfile(), 'Could not delete size profile.')}
             onUpdateReminderPrefs={updateReminderPrefs}
+            onReconcileReminders={() => runAction(reconcileReminders(), 'Could not sync reminders.')}
             onAddOccasion={addOccasionEvent}
             onOpenWishlist={() => navigate('/app/wishlist')}
           />
@@ -550,11 +611,12 @@ export function WorkspacePage() {
               run={run}
               busy={busy}
               litN={litN}
+              sizeProfile={sizeProfile}
               onLight={light}
               onOpenSource={openSource}
               onApprove={handleApprove}
               onDismiss={handleDismiss}
-              onInspectSize={(item) => setInspectedProduct(item)}
+              onInspectSize={handleInspectSize}
               onOpenWishlist={() => navigate('/app/wishlist')}
             />
           </main>
@@ -578,8 +640,13 @@ export function WorkspacePage() {
         <SizeIntelligenceModal
           product={inspectedProduct}
           result={inspectedResult}
+          loading={inspectLoading}
           unit={sizeProfile.unit}
-          onClose={() => setInspectedProduct(null)}
+          onClose={() => {
+            setInspectedProduct(null);
+            setInspectedResult(null);
+            setInspectLoading(false);
+          }}
           onGoToProfile={() => navigate('/app/size-profile')}
         />
       )}
