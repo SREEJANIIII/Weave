@@ -163,6 +163,18 @@ export function InspectorPanel({
                 );
               })}
             </ul>
+            <h2>Wishlist &amp; Size Intelligence</h2>
+            <ul className="apps">
+              <li className="app" data-yarn="wishlist">
+                <div className="app-row">
+                  <span className="swatch" data-yarn="wishlist" aria-hidden="true" />
+                  <div>
+                    <div className="app-name">Smart Wishlist &amp; Size Profile</div>
+                    <div className="app-blurb">Local browser sample data. External brand APIs are not connected yet.</div>
+                  </div>
+                </div>
+              </li>
+            </ul>
             <h2>Planned, not connected</h2>
             <ul className="planned">
               {(status.planned ?? []).map((p) => (

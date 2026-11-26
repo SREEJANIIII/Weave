@@ -86,9 +86,11 @@
   --yarn-tasks: oklch(19% 0.006 95);
   --yarn-workout: oklch(55% 0.11 145);
   --yarn-email: oklch(76% 0.11 5);
+  --yarn-wishlist: oklch(56% 0.16 320);
   /* Deeper dyes where a thin line has to hold up on white */
   --yarn-notes-deep: oklch(74% 0.16 75);
   --yarn-email-deep: oklch(66% 0.13 5);
+  --yarn-wishlist-deep: oklch(48% 0.18 320);
   /* On the night bands the black yarn turns chalk */
   --yarn-tasks-night: oklch(97% 0.003 95);
 

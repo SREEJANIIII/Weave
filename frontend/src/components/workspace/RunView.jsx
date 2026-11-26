@@ -192,7 +192,7 @@ function DraftCard({ proposal, sourceMap, nFor, litN, onLight, onOpenSource, onA
 }
 
 export const RunView = React.forwardRef(function RunView(
-  { run, busy, litN, onLight, onOpenSource, onApprove, onDismiss },
+  { run, busy, litN, onLight, onOpenSource, onApprove, onDismiss, onInspectSize, onOpenWishlist },
   ref,
 ) {
   const [callsOpenOverride, setCallsOpenOverride] = useState(null);
@@ -405,9 +405,53 @@ export const RunView = React.forwardRef(function RunView(
           )}
           <p className="stats">
             {`${plural(run.answer.stats.reads, 'MCP read')} in ${run.answer.stats.ms} ms. Planner: ${
-              run.answer.stats.mode === 'claude' ? `Claude (${run.answer.stats.model})` : 'offline script'
+              run.answer.stats.mode === 'claude'
+                ? `Claude (${run.answer.stats.model})`
+                : run.answer.stats.mode === 'local-wishlist'
+                  ? 'local Wishlist & Size Intelligence (sample data)'
+                  : 'offline script'
             }.`}
           </p>
+        </div>
+      )}
+
+      {run.highlightedProducts?.length > 0 && (
+        <div className="wl-inline-results" aria-label="Matched wishlist items and size intelligence">
+          <div className="wl-inline-head">
+            <h3>Matched Wishlist &amp; Size Intelligence</h3>
+            {onOpenWishlist && (
+              <button className="btn btn-link btn-sm" type="button" onClick={onOpenWishlist}>
+                Open full Wishlist
+              </button>
+            )}
+          </div>
+          <div className="wl-inline-grid">
+            {run.highlightedProducts.map(({ item, rec }) => (
+              <div key={item.id} className="wl-inline-card" data-yarn="wishlist">
+                <img src={item.image} alt="" className="wl-inline-thumb" />
+                <div className="wl-inline-info">
+                  <span className="wl-inline-brand">{item.brand} · {item.occasion}</span>
+                  <strong>{item.name}</strong>
+                  <span className={`wl-size-chip is-${rec.status}`}>
+                    {rec.recommendedSize
+                      ? `Recommended: ${rec.recommendedSize}${rec.runnerUpSize ? ` / ${rec.runnerUpSize}` : ''}`
+                      : rec.status === 'no_chart'
+                        ? 'Size chart unavailable'
+                        : 'Profile incomplete'}
+                  </span>
+                </div>
+                {onInspectSize && (
+                  <button
+                    className="btn btn-quiet btn-sm"
+                    type="button"
+                    onClick={() => onInspectSize(item)}
+                  >
+                    Find My Size
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

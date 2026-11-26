@@ -234,7 +234,7 @@ export function DaySkySection() {
     <section className="day" id="day" aria-labelledby="day-title">
       <div className="container day-grid">
         <div className="day-head">
-          <SplitWords as="h2" className="section-title" id="day-title" text="Small questions shouldn’t need five apps." />
+          <SplitWords as="h2" className="section-title" id="day-title" text="Small questions shouldn’t need multiple apps." />
           <div
             ref={skyRef}
             className={`sky is-live${skyOffscreen ? ' is-offscreen' : ''}`}

@@ -102,7 +102,7 @@ export function TangleSection() {
       <div className="container scattered-grid">
         <div className="scattered-copy">
           <h2 id="scattered-title" className="section-title">Right now, you are the&nbsp;glue.</h2>
-          <p className="section-lede">One question sends you through five apps to rebuild the answer by&nbsp;hand.</p>
+          <p className="section-lede">One question sends you through multiple apps to rebuild the answer by&nbsp;hand.</p>
         </div>
 
         <figure className="tangle" aria-labelledby="tangle-cap">

@@ -4,6 +4,7 @@ import { SplitWords } from '../SplitWords';
 const TABS = [
   { id: 'work', name: 'Work', q: 'What did I promise?', status: 'Works today', live: true, yarn: 'notes' },
   { id: 'week', name: 'Your week', q: 'When can I run?', status: 'Works today', live: true, yarn: 'calendar' },
+  { id: 'wishlist', name: 'Wishlist', q: 'Saved for Diwali?', status: 'Works today', live: true, yarn: 'wishlist' },
   { id: 'money', name: 'Money', q: 'Food costs last week?', status: 'Works today', live: true, yarn: 'money' },
   { id: 'email', name: 'Email', q: 'Who needs a reply?', status: 'Coming later', live: false, yarn: 'email' },
   { id: 'home', name: 'Home', q: 'Bills due soon?', status: 'Coming later', live: false, yarn: 'home' },
@@ -28,6 +29,16 @@ const AREAS = {
     items: [
       ['calendar', 'Your focus block ends at 6:00', "You're free until dinner at 7:30."],
       ['workout', 'Your plan says runs are 45 minutes', 'Best between 6 and 8 pm, with 15 minutes spare.'],
+    ],
+  },
+  wishlist: {
+    q: 'What outfits have I saved for Diwali?',
+    yarns: ['wishlist', 'calendar'],
+    check: 'Checked your wishlist, size profile and calendar',
+    head: 'Two outfits saved for Diwali (in 14 days).',
+    items: [
+      ['wishlist', 'Chanderi Silk Kurta Set — Aurelia Studio', 'Size M recommended from your bust & waist measurements.'],
+      ['calendar', 'Diwali celebration on your calendar', '14-day reminder active so you can review before ordering.'],
     ],
   },
   money: {

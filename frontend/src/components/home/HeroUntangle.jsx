@@ -8,12 +8,13 @@ const CARDS = [
   { app: 'calendar', yarn: 'calendar', icon: 'i-calendar', name: 'Calendar', detail: 'Review at 11:00', status: 'Checked', badge: '6 today' },
   { app: 'notes', yarn: 'notes', icon: 'i-notes', name: 'Notes', detail: '4 action items', status: 'Checked', badge: '2 new' },
   { app: 'tasks', yarn: 'tasks', icon: 'i-tasks', name: 'To-dos', detail: 'Venue due today', status: 'Checked', badge: '9 open' },
+  { app: 'wishlist', yarn: 'wishlist', icon: 'i-heart', name: 'Wishlist', detail: 'Diwali saree · Size M', status: 'Not needed', badge: 'Diwali · 14d', unused: true },
   { app: 'email', yarn: 'email', icon: 'i-mail', name: 'Email', detail: 'Priya: recap?', status: 'Not needed', badge: '4 unread', unused: true },
   { app: 'money', yarn: 'money', icon: 'i-money', name: 'Bank', detail: '8 food buys', status: 'Not needed', badge: '₹5,080', unused: true },
   { app: 'workout', yarn: 'workout', icon: 'i-fitness', name: 'Workout', detail: 'Run day, 45 min', status: 'Checked', badge: 'Today' },
 ];
 
-const DEPTHS = [1.2, 0.8, 1.4, 1, 0.9, 1.3];
+const DEPTHS = [1.2, 0.8, 1.4, 1.1, 1, 0.9, 1.3];
 
 export function HeroUntangle() {
   const stageRef = useRef(null);
@@ -71,8 +72,8 @@ export function HeroUntangle() {
       <div className="hero-pin">
         <div className="container hero-inner">
           <div className="hero-copy">
-            <SplitWords as="h1" className="hero-title" id="hero-title" text="Your next step, without opening five apps." hero />
-            <p className="hero-lede">Weave checks your calendar, notes and to-dos, then tells you what&nbsp;matters.</p>
+            <SplitWords as="h1" className="hero-title" id="hero-title" text="Your next step, without opening multiple apps." hero />
+            <p className="hero-lede">Weave checks your calendar, notes, to-dos, wishlist and more, then tells you what&nbsp;matters.</p>
             <div className="hero-actions">
               <Link className="btn btn-primary" to="/app" {...magneticCta}>
                 Try Weave
@@ -84,7 +85,7 @@ export function HeroUntangle() {
           <figure className="uv" aria-labelledby="uv-cap">
             <div ref={stageRef} className="uv-stage">
               <p className="uv-steps" aria-hidden="true">
-                <span className="uv-step s1">Your day, spread across six apps.</span>
+                <span className="uv-step s1">Your day, spread across multiple apps.</span>
                 <span className="uv-step s2">You ask one question.</span>
                 <span className="uv-step s3">Weave checks only what it needs.</span>
                 <span className="uv-step s4">One answer. You decide what happens.</span>
@@ -94,10 +95,10 @@ export function HeroUntangle() {
                 <path className="ink" pathLength="1" d="M74,19 C96,40 60,58 80,51 S20,36 46,41 S66,84 56,77 S0,46 18,21" />
               </svg>
               <svg className="uv-strands" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                <path data-yarn="calendar" pathLength="1" d="M15.5,30 C15.5,38 22,40 22,48" />
-                <path data-yarn="notes" pathLength="1" d="M50,30 C50,40 38,40 38,48" />
-                <path data-yarn="tasks" pathLength="1" d="M84.5,30 C84.5,40 54,40 54,48" />
-                <path data-yarn="workout" pathLength="1" d="M84.5,41 C84.5,45 70,44 70,48" />
+                <path data-yarn="calendar" pathLength="1" d="M11.75,29 C11.75,38 22,40 22,48" />
+                <path data-yarn="notes" pathLength="1" d="M37.25,29 C37.25,40 38,40 38,48" />
+                <path data-yarn="tasks" pathLength="1" d="M62.75,29 C62.75,40 54,40 54,48" />
+                <path data-yarn="workout" pathLength="1" d="M75.5,41 C75.5,45 70,44 70,48" />
               </svg>
               <p className="uv-q">What should I follow up on today, and when can I fit in a&nbsp;workout?</p>
 
@@ -141,4 +142,3 @@ export function HeroUntangle() {
     </section>
   );
 }
-
