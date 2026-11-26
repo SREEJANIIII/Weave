@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import { Hub } from './hub.js';
 import { ProposalStore } from './run.js';
-import { hasCredentials, MODEL } from './agent-nim.js';
+import { hasCredentials, MODEL } from './agent-nvidia.js';
 import { connectDatabase, closeDatabase } from '../db/database.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -14,11 +14,13 @@ const HOST = '127.0.0.1';
 const hub = new Hub(root);
 const proposals = new ProposalStore();
 const state = {
-  mode: ['nim', 'offline'].includes(process.env.WEAVE_MODE) ? process.env.WEAVE_MODE : hasCredentials() ? 'nim' : 'offline',
+  mode: ['nvidia', 'offline'].includes(process.env.WEAVE_MODE) ? process.env.WEAVE_MODE : hasCredentials() ? 'nvidia' : 'offline',
 };
 
 async function main() {
-  try {
+  if (!process.env.MONGODB_URI) {
+    console.log('  Database  not set up (MONGODB_URI is empty); Wishlist & sizes stays off, everything else works.');
+  } else try {
     await connectDatabase();
     console.log('  Database  MongoDB connected');
   } catch (err) {
@@ -41,7 +43,7 @@ async function main() {
   const server = app.listen(PORT, HOST, () => {
     const apps = hub.status().map((a) => `${a.id} (${a.status === 'connected' ? `${a.tools.length} tools` : a.status})`).join(', ');
     console.log(`\n  Weave prototype  →  http://localhost:${PORT}\n`);
-    console.log(`  Planner   ${state.mode === 'nim' ? `NVIDIA NIM (${MODEL})` : 'Offline script'}${hasCredentials() ? '' : '  ·  no NVIDIA NIM API key found'}`);
+    console.log(`  Planner   ${state.mode === 'nvidia' ? `NVIDIA (${MODEL})` : 'Offline script'}${hasCredentials() ? '' : '  ·  no NVIDIA credentials found'}`);
     console.log(`  MCP apps  ${apps}\n`);
   });
   server.on('error', (err) => {

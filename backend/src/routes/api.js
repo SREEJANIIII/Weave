@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { PLANNED } from '../hub.js';
 import { Run } from '../run.js';
 import { runOffline, DEMO_QUESTIONS } from '../agent-offline.js';
-import { runNim, explainError, hasCredentials, MODEL, BASE_URL } from '../agent-nim.js';
+import { runNvidia, explainError, hasCredentials, MODEL } from '../agent-nvidia.js';
 import { now, isoDate, fmtLongDate } from '../../lib/dates.js';
 import { AppDataRepository } from '../../repositories/app-data-repository.js';
 import { createConnectionsRouter } from './connections.js';
@@ -14,6 +14,10 @@ const EDITABLE = {
   save_wishlist_item: ['product_name', 'brand', 'product_url', 'image_url', 'category', 'occasion', 'notes', 'description', 'price', 'status', 'product_id'],
   update_wishlist_item: ['product_name', 'brand', 'product_url', 'image_url', 'category', 'occasion', 'notes', 'description', 'price', 'status', 'product_id'],
   update_size_profile: ['bust', 'waist', 'hips', 'shoulder', 'inseam', 'height', 'unit', 'preferred_fit', 'preferred_categories'],
+  save_appliance: ['name', 'brand', 'model', 'serialNumber', 'purchaseDate', 'serviceDetails', 'amcProvider', 'notes'],
+  update_appliance: ['name', 'brand', 'model', 'serialNumber', 'purchaseDate', 'serviceDetails', 'amcProvider', 'notes'],
+  update_appliance_deadline: ['dueDate', 'title', 'status'],
+  update_appliance_reminder: ['status'],
 };
 
 export async function statusPayload({ hub, state, appData }) {
@@ -43,7 +47,7 @@ export async function statusPayload({ hub, state, appData }) {
     mode: state.mode,
     profileEncrypted: Boolean(process.env.WEAVE_PROFILE_ENCRYPTION_KEY),
     planners: {
-      nim: { model: MODEL, baseUrl: BASE_URL, credentials: hasCredentials() },
+      nvidia: { model: MODEL, credentials: hasCredentials() },
       offline: { questions: DEMO_QUESTIONS },
     },
     apps,
@@ -67,12 +71,23 @@ async function approve(hub, proposals, id, changes = {}) {
     return [200, { proposal: p }];
   }
   // Only report success after reading the new record back from the app.
-  const record = res.data?.task ?? res.data?.event ?? res.data?.item ?? res.data?.profile ?? res.data?.deleted ?? res.data?.reminder ?? (Array.isArray(res.data?.reminders) ? res.data : null);
-  const getter = { create_task: 'get_task', create_event: 'get_event', save_wishlist_item: 'get_wishlist_item', update_wishlist_item: 'get_wishlist_item' }[p.tool];
+  const record =
+    res.data?.task ?? res.data?.event ?? res.data?.item ?? res.data?.profile ?? res.data?.deleted ?? res.data?.reminder ??
+    res.data?.appliance ?? res.data?.deadline ?? res.data?.document ??
+    (Array.isArray(res.data?.reminders) ? res.data : null);
+  const getter = {
+    create_task: 'get_task', create_event: 'get_event', save_wishlist_item: 'get_wishlist_item', update_wishlist_item: 'get_wishlist_item',
+    save_appliance: 'get_appliance', update_appliance: 'get_appliance', update_appliance_deadline: 'get_appliance_deadline',
+    create_appliance_reminder: 'get_appliance_reminder', update_appliance_reminder: 'get_appliance_reminder', confirm_appliance_document: 'get_appliance_documents',
+  }[p.tool];
   let verified = false;
   if (record?.id && getter) {
     const check = await hub.call(p.server, getter, { id: record.id }, { summary: 'read back to confirm' });
-    verified = !check.isError && (check.data?.task?.id === record.id || check.data?.event?.id === record.id || check.data?.item?.id === record.id);
+    verified =
+      !check.isError &&
+      (check.data?.task?.id === record.id || check.data?.event?.id === record.id || check.data?.item?.id === record.id ||
+        check.data?.appliance?.id === record.id || check.data?.deadline?.id === record.id || check.data?.reminder?.id === record.id ||
+        Boolean(check.data?.documents?.some((d) => d.id === record.id)));
   } else if (p.tool === 'update_size_profile') {
     verified = !res.isError && Boolean(res.data?.profile);
   } else if (p.tool === 'delete_size_profile') {
@@ -83,6 +98,8 @@ async function approve(hub, proposals, id, changes = {}) {
     verified = !res.isError && Array.isArray(res.data?.reminders);
   } else if (p.tool === 'dismiss_reminder') {
     verified = !res.isError && Boolean(res.data?.reminder);
+  } else if (p.tool === 'reconcile_appliance_reminders') {
+    verified = !res.isError && Array.isArray(res.data?.reminders);
   }
   Object.assign(p, { status: verified ? 'done' : 'unverified', args, result: record, conflicts: res.data?.conflicts ?? [], decidedAt: new Date().toISOString() });
   return [200, { proposal: p }];
@@ -110,10 +127,10 @@ export function createApiRouter({ hub, proposals, state }) {
       if (!res.writableEnded && !res.destroyed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
     const mode = state.mode;
-    const run = new Run({ hub, proposals, question: q, mode, model: mode === 'nim' ? MODEL : null, emit: send });
+    const run = new Run({ hub, proposals, question: q, mode, model: mode === 'nvidia' ? MODEL : null, emit: send });
     send('run', { id: run.id, mode, model: run.model, question: q });
     try {
-      if (mode === 'nim') await runNim(run);
+      if (mode === 'nvidia') await runNvidia(run);
       else await runOffline(run);
     } catch (err) {
       console.error('[ask]', err);
@@ -144,7 +161,7 @@ export function createApiRouter({ hub, proposals, state }) {
 
   router.post('/mode', async (req, res) => {
     const { mode } = req.body ?? {};
-    if (!['nim', 'offline'].includes(mode)) return res.status(400).json({ error: 'Unknown planner.' });
+    if (!['nvidia', 'offline'].includes(mode)) return res.status(400).json({ error: 'Unknown planner.' });
     state.mode = mode;
     res.json(await statusPayload({ hub, state, appData }));
   });

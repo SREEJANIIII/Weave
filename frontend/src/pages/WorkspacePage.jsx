@@ -1,36 +1,72 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Icon } from '../components/Icons';
-import { AppTopBar } from '../components/workspace/AppTopBar';
-import { RunView } from '../components/workspace/RunView';
-import { InspectorPanel } from '../components/workspace/InspectorPanel';
+import { Icon, LogoSymbol } from '../components/Icons';
+import { Sidebar } from '../components/dashboard/Sidebar';
+import { Composer } from '../components/dashboard/Composer';
+import { Turn } from '../components/dashboard/Turn';
+import { TodayPanel } from '../components/dashboard/TodayPanel';
+import { ConnectionsPage } from '../components/dashboard/ConnectionsPage';
+import { SavedPage } from '../components/dashboard/SavedPage';
+import { UploadSheet } from '../components/dashboard/UploadSheet';
+import { Toast } from '../components/dashboard/Toast';
 import { WishlistView } from '../components/wishlist/WishlistView';
 import { SizeProfileView } from '../components/profile/SizeProfileView';
 import { SizeIntelligenceModal } from '../components/wishlist/SizeIntelligenceModal';
 import { ConnectionsView } from '../components/connections/ConnectionsView';
 import { SHORT } from '../lib/formatters';
+import { AppliancesView } from '../components/appliances/AppliancesView';
+import { api } from '../lib/api';
+import { joinNames } from '../lib/services';
+import { STARTERS } from '../lib/followUps';
+import { answerFromSaved, savedIntent, withSavedNotes, workoutNotesForLastWeek } from '../lib/savedPapers';
 import { matchOccasions } from '../lib/occasionMatcher';
 import { buildWishlistRunResponse, isWishlistQuery } from '../lib/wishlistContextQA';
 import { useWishlistStore } from '../hooks/useWishlistStore';
+import { useConnections } from '../hooks/useConnections';
+import { useSavedPapers } from '../hooks/useSavedPapers';
+import { useChats } from '../hooks/useChats';
+import { useVoice } from '../hooks/useVoice';
 import { usePageMeta } from '../hooks/usePageSetup';
 
-const TABS = ['apps', 'sources', 'activity'];
+const LAST_SIDEBAR = 'weave:sidebar:v1';
+const TECH = 'weave:tech:v1';
 
-const WISHLIST_PROMPTS = [
-  'What outfits have I saved for Diwali?',
-  'Which of my saved outfits are likely to fit me?',
-  "My friend's wedding is next month. Do I have anything saved for it?",
-  'Show me the products I should revisit before my upcoming occasions.',
-  'Which size should I consider for this dress?',
-];
+function useNarrow() {
+  const query = '(max-width: 47.99rem)';
+  const [narrow, setNarrow] = useState(() => matchMedia(query).matches);
+  useEffect(() => {
+    const mq = matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
 
-async function api(path, body) {
-  const res = await fetch(
-    path,
-    body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+function Welcome({ services, onConnectAll, onChoose, onLater }) {
+  const reachable = services.filter((s) => s.state !== 'unavailable');
+  if (!reachable.length) return null;
+  return (
+    <section className="welcome" aria-labelledby="welcome-title">
+      <div>
+        <h2 id="welcome-title">Choose what Weave can look at</h2>
+        <p>
+          Nothing is read until you say so. Connect {joinNames(reachable.map((s) => s.name))} to get answers about your day. You can disconnect any time.
+        </p>
+      </div>
+      <div className="row-actions">
+        <button className="d-btn is-ink is-sm" type="button" onClick={() => onConnectAll(reachable.map((s) => s.id))}>
+          Connect {reachable.length === 1 ? 'it' : `all ${reachable.length}`}
+        </button>
+        <button className="d-btn is-line is-sm" type="button" onClick={onChoose}>
+          Choose
+        </button>
+        <button className="d-btn is-plain is-sm" type="button" onClick={onLater}>
+          Not now
+        </button>
+      </div>
+    </section>
   );
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
 }
 
 export function WorkspacePage() {
@@ -57,186 +93,230 @@ export function WorkspacePage() {
             : 'Weave prototype: ask across your apps',
     description:
       'Ask one question across your connected apps, manage your Smart Wishlist & Size Intelligence, and approve changes before anything runs.',
-  });
-
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'apps';
+  const PAGES = { '/app/wishlist': 'wishlist', '/app/size-profile': 'size-profile', '/app/appliances': 'appliances', '/app/saved': 'saved', '/app/connections': 'connections' };
+  const view = Object.entries(PAGES).find(([path]) => location.pathname.startsWith(path))?.[1] ?? 'home';
 
-  const [status, setStatus] = useState(null);
-  const [offline, setOffline] = useState(false);
-  const [activity, setActivity] = useState([]);
-  const [tab, setTab] = useState(initialTab);
-  const [busy, setBusy] = useState(false);
-  const [questionText, setQuestionText] = useState('');
-  const [run, setRun] = useState(null);
-  const [litN, setLitN] = useState(null);
-  const [toastMsg, setToastMsg] = useState('');
-  const [toastOn, setToastOn] = useState(false);
-  const [inspectedProduct, setInspectedProduct] = useState(null);
-  const [inspectedResult, setInspectedResult] = useState(null);
-  const [inspectLoading, setInspectLoading] = useState(false);
-
-  const wishlistEnabled = useMemo(
-    () => Boolean(status?.apps?.find((a) => a.id === 'wishlist')?.enabled && status?.apps?.find((a) => a.id === 'wishlist')?.status === 'connected'),
-    [status],
-  );
-  const calendarEnabled = useMemo(
-    () => Boolean(status?.apps?.find((a) => a.id === 'calendar')?.enabled && status?.apps?.find((a) => a.id === 'calendar')?.status === 'connected'),
-    [status],
-  );
-
-  const {
-    syncMode,
-    syncing,
-    profileDeleted,
-    wishlist,
-    sizeProfile,
-    reminderPrefs,
-    backendReminders,
-    occasions,
-    refreshAll,
-    addItem,
-    updateItem,
-    removeItem,
-    saveProfile,
-    clearProfileMeasurements,
-    deleteProfile,
-    matchSizeForProduct,
-    updateReminderPrefs,
-    reconcileReminders,
-    dismissReminder,
-    approveReminderEvent,
-    addOccasionEvent,
-    resetWishlistDemo,
-  } = useWishlistStore({
-    backendOnline: !offline && Boolean(status),
-    wishlistEnabled,
-    calendarEnabled,
+  usePageMeta({
+    page: ['wishlist', 'size-profile', 'appliances'].includes(view) ? 'app' : 'dashboard',
+    title: { wishlist: 'Weave — Wishlist', 'size-profile': 'Weave — Sizes', appliances: 'Weave — Appliances & Bills', saved: 'Weave — Saved', connections: 'Weave — Connections' }[view] ?? 'Weave',
+    description: 'Ask Weave about your plans, purchases and papers. It answers from what you’ve saved and connected, and asks before changing anything.',
   });
 
-  const activeReminderCount = useMemo(
-    () => matchOccasions(wishlist, occasions, reminderPrefs, status?.today, backendReminders).filter((m) => m.inWindow && !m.dismissed).length,
-    [wishlist, occasions, reminderPrefs, status?.today, backendReminders],
-  );
+  const conn = useConnections();
+  const papers = useSavedPapers();
+  const store = useWishlistStore();
+  const chats = useChats();
+  const narrow = useNarrow();
 
-  const textareaRef = useRef(null);
-  const runRef = useRef(null);
-  const runSeqRef = useRef(0);
-  const sourceRefs = useRef(new Map());
-  const toastTimerRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [glance, setGlance] = useState(null);
+  const [glanceLoading, setGlanceLoading] = useState(true);
+  const [activity, setActivity] = useState([]);
+  const [techDetails, setTechDetails] = useState(() => localStorage.getItem(TECH) === '1');
+  const [toast, setToast] = useState(null);
+  const [uploadJob, setUploadJob] = useState(null);
+  const [freshId, setFreshId] = useState(null);
+  const [dismissing, setDismissing] = useState(() => new Set());
+  const [addSignal, setAddSignal] = useState(0);
+  const [sideOpen, setSideOpen] = useState(() => localStorage.getItem(LAST_SIDEBAR) !== 'closed');
+  const [drawer, setDrawer] = useState(false);
 
-  const showToast = useCallback((message) => {
-    setToastMsg(message);
-    setToastOn(true);
-    clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToastOn(false), 5000);
-  }, []);
+  const seqRef = useRef(0);
+  const busyRef = useRef(false);
+  const inputRef = useRef(null);
+  const scrollRef = useRef(null);
+  const threadRef = useRef(null);
+  const stickRef = useRef(true);
+  const toastTimer = useRef(null);
+  const dismissTimers = useRef(new Map());
 
-  const selectTab = useCallback(
-    (name) => {
-      const next = TABS.includes(name) ? name : 'apps';
-      setTab(next);
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          params.set('tab', next);
-          return params;
-        },
-        { replace: true },
-      );
+  const turns = chats.active?.turns ?? [];
+  const hasThread = view === 'home' && turns.length > 0;
+  const focus = searchParams.get('focus');
+
+  /* ---------- Panels, toasts, sidebar ---------- */
+
+  /** Saved and Connections are pages; `focusId` opens one item on arrival. */
+  const openPanel = useCallback(
+    (name, focusId) => {
+      setDrawer(false);
+      navigate(`/app/${name}${focusId ? `?focus=${encodeURIComponent(focusId)}` : ''}`);
     },
-    [setSearchParams],
+    [navigate],
   );
+  const closePanel = useCallback(() => {}, []);
 
-  const loadActivity = useCallback(async () => {
-    try {
-      const r = await api('/api/activity');
-      if (r.ok) setActivity(r.data.activity ?? []);
-    } catch {
-      // keep existing activity
-    }
+  const showToast = useCallback((message, action) => {
+    clearTimeout(toastTimer.current);
+    setToast({ message, action, id: Date.now() });
+    toastTimer.current = setTimeout(() => setToast(null), action ? 7000 : 4500);
   }, []);
 
-  const loadStatus = useCallback(async () => {
-    try {
-      const r = await api('/api/status');
-      if (!r.ok) throw new Error();
-      setStatus(r.data);
-      setOffline(false);
-      loadActivity();
-    } catch {
-      setOffline(true);
+  const toggleSidebar = () => {
+    if (narrow) {
+      setDrawer((d) => !d);
+      return;
     }
-  }, [loadActivity]);
-
-  useEffect(() => {
-    loadStatus();
-    return () => clearTimeout(toastTimerRef.current);
-  }, [loadStatus]);
-
-  const autosize = () => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    setSideOpen((open) => {
+      try {
+        localStorage.setItem(LAST_SIDEBAR, open ? 'closed' : 'open');
+      } catch {
+        // remembered for this visit only
+      }
+      return !open;
+    });
   };
 
+  const goHome = () => {
+    if (view !== 'home') navigate('/app');
+    setDrawer(false);
+  };
+
+  const newChat = () => {
+    chats.startNew();
+    goHome();
+    setQuestion('');
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  /** "Add a photo or file" from anywhere: open the ask box's add menu, where the file picker lives. */
+  const openAddMenu = () => {
+    goHome();
+    closePanel();
+    setAddSignal((n) => n + 1);
+  };
+
+  /* ---------- Today cards ---------- */
+
+  const connectedKey = conn.connected.map((s) => s.id).join(',');
+  useEffect(() => {
+    if (!conn.synced) return undefined;
+    if (conn.offline) {
+      setGlance(null);
+      setGlanceLoading(false);
+      return undefined;
+    }
+    let live = true;
+    setGlanceLoading(true);
+    api('/api/calendar/events').then((r) => {
+      if (!live) return;
+      const events = r.ok ? (r.data.events ?? []) : [];
+      const today = conn.status?.today ?? new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const next = events.find((event) => event.date > today || (event.date === today && event.end >= hhmm)) ?? null;
+      setGlance({ now: hhmm, calendar: { status: r.ok ? 'ok' : 'error', next }, tasks: { status: 'unavailable', due: [] } });
+      setGlanceLoading(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, [conn.synced, conn.offline, connectedKey]);
+
+  useEffect(() => {
+    if (!techDetails || view !== 'connections' || conn.offline) return;
+    api('/api/activity').then((r) => r.ok && setActivity(r.data.activity ?? []));
+  }, [techDetails, view, conn.offline, turns.length]);
+
+  /* ---------- Follow the answer as it is written ---------- */
+
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    const thread = threadRef.current;
+    if (!scroller || !thread) return undefined;
+    const onScroll = () => {
+      stickRef.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+    };
+    const grow = new ResizeObserver(() => {
+      if (stickRef.current) scroller.scrollTop = scroller.scrollHeight;
+    });
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    grow.observe(thread);
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      grow.disconnect();
+    };
+  }, [hasThread, chats.activeId]);
+
+  useEffect(() => {
+    if (view !== 'home' && scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [view]);
+
+  useEffect(() => {
+    // Opening a conversation shows its latest answer; other pages start at the top.
+    if (view !== 'home') return;
+    stickRef.current = true;
+    requestAnimationFrame(() => {
+      const s = scrollRef.current;
+      if (s) s.scrollTop = s.scrollHeight;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chats.activeId]);
+
+  /* ---------- Asking ---------- */
+
+  const wishlistState = conn.services.find((s) => s.id === 'wishlist')?.state;
+
   const ask = useCallback(
-    async (rawQ) => {
-      const q = rawQ.trim();
-      if (!q || busy) return;
+    async (raw) => {
+      const q = String(raw ?? '').trim();
+      if (!q || busyRef.current) return;
+      if (view !== 'home') navigate('/app');
+      closePanel();
+      setDrawer(false);
+      setQuestion('');
+      stickRef.current = true;
+      const seq = `${Date.now().toString(36)}-${++seqRef.current}`;
 
-      // Local Smart Wishlist & Size Intelligence fallback ONLY when the backend server is offline
-      if (offline && isWishlistQuery(q, wishlist)) {
-        const seq = ++runSeqRef.current;
-        setLitN(null);
-        const localRun = buildWishlistRunResponse({
+      // 1. Receipts, warranties and bills saved on this device.
+      const intent = savedIntent(q, papers.saved);
+      const serverCanReadPapers = false;
+      if (intent.claims && (intent.matches.length || !serverCanReadPapers)) {
+        chats.addTurn({ seq, fresh: true, ...answerFromSaved(q, papers.saved, intent) });
+        return;
+      }
+
+      // 2. The wishlist kept in this browser. "Fit in a workout" or "meeting" questions belong to the services.
+      const aboutMyDay = /follow[\s-]?up|workout|exercise|gym|meeting|calendar|spen[dt]|to-?dos?|tasks?/i.test(q);
+      if (!aboutMyDay && wishlistState !== 'off' && isWishlistQuery(q, store.wishlist)) {
+        const local = buildWishlistRunResponse({
           question: q,
-          wishlist,
-          sizeProfile,
-          occasions,
-          reminderPrefs,
-          onApproveReminder: approveReminderEvent,
+          wishlist: store.wishlist,
+          sizeProfile: store.sizeProfile,
+          occasions: store.occasions,
+          reminderPrefs: store.reminderPrefs,
+          onApproveReminder: store.approveReminderEvent,
         });
-        setRun({ seq, ...localRun });
-        selectTab('sources');
-        requestAnimationFrame(() => {
-          runRef.current?.scrollIntoView({
-            block: 'start',
-            behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-          });
+        chats.addTurn({ seq, fresh: true, ...local, question: q });
+        return;
+      }
+
+      // 3. Connected services, through the server.
+      if (conn.offline) {
+        chats.addTurn({
+          seq,
+          question: q,
+          steps: [],
+          proposals: [],
+          answer: null,
+          done: true,
+          error: { message: 'I can’t reach your connected services right now.', hint: 'Your saved papers still work. Try again in a moment.' },
         });
         return;
       }
 
-      if (offline) {
-        showToast('Start the Weave backend with npm start for Calendar/Notes/Tasks/Money questions, or ask about your Wishlist & Size Profile.');
-        return;
-      }
-
-      const seq = ++runSeqRef.current;
+      busyRef.current = true;
       setBusy(true);
-      setLitN(null);
-      setRun({ seq, question: q, steps: [], proposals: [], answer: null, error: null, done: false });
-      requestAnimationFrame(() => {
-        runRef.current?.scrollIntoView({
-          block: 'start',
-          behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        });
-      });
+      chats.addTurn({ seq, fresh: true, question: q, steps: [], proposals: [], answer: null, error: null, done: false });
 
-      let gotAnswer = false;
       try {
-        const res = await fetch('/api/ask', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: q }),
-        });
+        const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) });
         if (!res.ok || !res.body) {
           const j = await res.json().catch(() => ({}));
           throw Object.assign(new Error(j.error ?? `The server answered ${res.status}.`), { known: true });
         }
-
         const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
         let buf = '';
         for (;;) {
@@ -259,209 +339,236 @@ export function WorkspacePage() {
             } catch {
               continue;
             }
-            if (event === 'run') {
-              setRun((prev) => (prev ? { ...prev, id: payload.id, mode: payload.mode, model: payload.model } : prev));
-            } else if (event === 'step') {
-              setRun((prev) => {
-                if (!prev) return prev;
-                const idx = prev.steps.findIndex((s) => s.id === payload.id);
-                const steps = idx >= 0 ? prev.steps.map((s, k) => (k === idx ? payload : s)) : [...prev.steps, payload];
-                return { ...prev, steps };
+            if (event === 'step') {
+              chats.updateTurn(seq, (t) => {
+                const i = t.steps.findIndex((s) => s.id === payload.id);
+                return { ...t, steps: i >= 0 ? t.steps.map((s, k) => (k === i ? payload : s)) : [...t.steps, payload] };
               });
             } else if (event === 'proposal') {
-              setRun((prev) => {
-                if (!prev) return prev;
-                const idx = prev.proposals.findIndex((p) => p.id === payload.id);
-                const proposals =
-                  idx >= 0 ? prev.proposals.map((p, k) => (k === idx ? payload : p)) : [...prev.proposals, payload];
-                return { ...prev, proposals };
+              chats.updateTurn(seq, (t) => {
+                const i = t.proposals.findIndex((p) => p.id === payload.id);
+                return { ...t, proposals: i >= 0 ? t.proposals.map((p, k) => (k === i ? payload : p)) : [...t.proposals, payload] };
               });
             } else if (event === 'answer') {
-              gotAnswer = true;
-              setRun((prev) => {
-                if (!prev) return prev;
-                const map = new Map(prev.proposals.map((p) => [p.id, p]));
+              const notes = workoutNotesForLastWeek(q, papers.saved);
+              chats.updateTurn(seq, (t) => {
+                const map = new Map(t.proposals.map((p) => [p.id, p]));
                 for (const p of payload.proposals ?? []) map.set(p.id, { ...map.get(p.id), ...p });
-                return { ...prev, answer: payload, proposals: [...map.values()] };
+                return { ...t, answer: withSavedNotes(payload, notes), proposals: [...map.values()] };
               });
             } else if (event === 'error') {
-              setRun((prev) => (prev ? { ...prev, error: payload } : prev));
-            } else if (event === 'done') {
-              setRun((prev) => (prev ? { ...prev, ms: payload.ms } : prev));
+              chats.updateTurn(seq, (t) => ({ ...t, error: payload }));
             }
           }
         }
       } catch (err) {
         const error = err.known
           ? { message: err.message, hint: '' }
-          : { message: 'The connection to the Weave server dropped.', hint: 'Check that the server is still running, then ask again.' };
-        setRun((prev) => (prev ? { ...prev, error } : prev));
+          : { message: 'The connection to Weave dropped before I could answer.', hint: 'Check that the Weave server is running, then try again.' };
+        chats.updateTurn(seq, (t) => ({ ...t, error }));
       }
-
-      setRun((prev) => (prev ? { ...prev, done: true } : prev));
+      chats.updateTurn(seq, (t) => ({ ...t, done: true }));
+      busyRef.current = false;
       setBusy(false);
-      await loadActivity();
-      if (gotAnswer) selectTab('sources');
     },
-    [busy, offline, status?.mode, wishlist, sizeProfile, occasions, reminderPrefs, approveReminderEvent, loadActivity, selectTab, showToast],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [view, papers.saved, conn.status?.mode, conn.offline, wishlistState, store.wishlist, store.sizeProfile, store.occasions, store.reminderPrefs, chats.addTurn],
   );
 
-  const handleSetMode = async (mode) => {
-    if (!status || status.mode === mode || busy) return;
-    const r = await api('/api/mode', { mode });
-    if (!r.ok) {
-      showToast(r.data.error ?? "Couldn't switch the planner.");
-      return;
-    }
-    setStatus(r.data);
-  };
+  const voice = useVoice({ onFinal: (text) => ask(text) });
 
-  const handleReset = async () => {
-    resetWishlistDemo();
-    if (!offline) {
-      const r = await api('/api/reset', {});
-      if (r.ok) {
-        setStatus(r.data);
-        loadActivity();
-        await refreshAll();
-      } else {
-        showToast(r.data.error ?? "Couldn't reset the backend MCP servers.");
-      }
-    }
-    setRun(null);
-    setLitN(null);
-    showToast('Sample data restored.');
-  };
+  /* ---------- Approving drafted changes ---------- */
 
-  const handleToggleApp = async (a) => {
-    const r = await api(`/api/apps/${encodeURIComponent(a.id)}`, { enabled: !a.enabled });
-    if (!r.ok) {
-      showToast(r.data.error ?? `Couldn't switch ${a.name}.`);
-      return;
-    }
-    setStatus(r.data);
-  };
-
-  const updateProposal = (id, patch) => {
-    setRun((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        proposals: prev.proposals.map((p) => (p.id === id ? { ...p, ...patch } : p)),
-      };
-    });
-  };
+  const updateProposal = (id, patch) =>
+    chats.updateAllTurns((t) => (t.proposals?.some((p) => p.id === id) ? { ...t, proposals: t.proposals.map((p) => (p.id === id ? { ...p, ...patch } : p)) } : t));
 
   const handleApprove = async (p, changes = {}) => {
     if (typeof p.localAction === 'function') {
       p.localAction();
-      updateProposal(p.id, {
-        status: 'done',
-        args: { ...p.args, ...changes },
-        conflicts: [],
-      });
+      updateProposal(p.id, { status: 'done', args: { ...p.args, ...changes }, conflicts: [] });
       return;
     }
     updateProposal(p.id, { status: 'running' });
     const r = await api(`/api/proposals/${encodeURIComponent(p.id)}/approve`, { changes });
-    if (r.data.proposal) {
-      updateProposal(p.id, r.data.proposal);
-      if (r.data.proposal.status === 'done' && (p.server === 'wishlist' || p.server === 'calendar')) {
-        refreshAll();
-      }
-    } else {
+    if (r.data?.proposal) updateProposal(p.id, r.data.proposal);
+    else if (r.status === 404) updateProposal(p.id, { status: 'expired' });
+    else {
       updateProposal(p.id, { status: 'pending' });
-      showToast(r.data.error ?? "Couldn't approve that draft.");
+      showToast(r.data?.error ?? 'That didn’t go through. Nothing was changed.');
     }
-    if (r.status === 409 && r.data.error) showToast(r.data.error);
-    loadActivity();
   };
 
-  const handleDismiss = async (p) => {
-    if (typeof p.localAction === 'function') {
-      updateProposal(p.id, { status: 'dismissed' });
-      return;
-    }
-    const r = await api(`/api/proposals/${encodeURIComponent(p.id)}/dismiss`, {});
-    if (r.data.proposal) updateProposal(p.id, r.data.proposal);
-    else showToast(r.data.error ?? "Couldn't dismiss that draft.");
+  const stopDismissing = (id) =>
+    setDismissing((s) => {
+      const n = new Set(s);
+      n.delete(id);
+      return n;
+    });
+
+  const handleUndoDismiss = (p) => {
+    clearTimeout(dismissTimers.current.get(p.id));
+    dismissTimers.current.delete(p.id);
+    stopDismissing(p.id);
+    setToast(null);
   };
 
-  const light = useCallback(
-    (n) => {
-      setLitN(n);
-      if (!n) return;
-      const card = sourceRefs.current.get(n);
-      if (card && tab === 'sources' && matchMedia('(min-width: 64.01rem)').matches) {
-        card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  const handleDismiss = (p) => {
+    setDismissing((s) => new Set(s).add(p.id));
+    showToast(`Okay, I won’t add “${p.args?.title ?? 'it'}”.`, { label: 'Undo', run: () => handleUndoDismiss(p) });
+    const timer = setTimeout(async () => {
+      dismissTimers.current.delete(p.id);
+      if (typeof p.localAction === 'function') updateProposal(p.id, { status: 'dismissed' });
+      else {
+        const r = await api(`/api/proposals/${encodeURIComponent(p.id)}/dismiss`, {});
+        updateProposal(p.id, r.data?.proposal ?? { status: 'dismissed' });
       }
-    },
-    [tab],
-  );
+      stopDismissing(p.id);
+    }, 7000);
+    dismissTimers.current.set(p.id, timer);
+  };
 
-  const openSource = useCallback(
-    (n) => {
-      selectTab('sources');
-      setLitN(n);
-      requestAnimationFrame(() => {
-        const card = sourceRefs.current.get(n);
-        if (!card) return;
-        card.scrollIntoView({
-          block: 'center',
-          behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        });
-        card.focus({ preventScroll: true });
-      });
-    },
-    [selectTab],
-  );
+  /* ---------- Connections ---------- */
 
-  const handleInspectSize = useCallback(
-    async (item) => {
-      setInspectedProduct(item);
-      setInspectedResult(null);
-      setInspectLoading(syncMode === 'backend');
-      const result = await matchSizeForProduct(item);
-      setInspectedResult(result);
-      setInspectLoading(false);
-    },
-    [syncMode, matchSizeForProduct],
-  );
+  const nameOf = (id) => conn.services.find((s) => s.id === id)?.name ?? id;
 
-  const runAction = useCallback(
-    async (promise, errFallback) => {
-      const res = await promise;
-      if (res && res.ok === false) showToast(res.error || errFallback);
-      else loadActivity();
-      return res;
-    },
-    [loadActivity, showToast],
-  );
+  const connect = async (id) => {
+    const ok = await conn.setService(id, true);
+    showToast(ok ? `${nameOf(id)} is connected. Weave will use it when a question needs it.` : `Couldn’t connect ${nameOf(id)}. Nothing changed.`);
+  };
+  const disconnect = async (id) => {
+    const ok = await conn.setService(id, false);
+    if (ok) showToast(`${nameOf(id)} is disconnected. Weave won’t read it.`, { label: 'Undo', run: () => conn.setService(id, true) });
+    else showToast(`Couldn’t disconnect ${nameOf(id)}. Try again.`);
+  };
+  const connectAll = async (ids) => {
+    const ok = await conn.connectMany(ids);
+    showToast(ok ? `Connected ${joinNames(ids.map(nameOf))}.` : 'Couldn’t connect them. Nothing changed.');
+  };
+  const notNow = async () => {
+    for (const s of conn.services) if (s.state !== 'unavailable') await conn.setService(s.id, false);
+    showToast('Okay. You can connect services any time from Connections.');
+  };
 
-  const hour = status?.hour ?? new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning.' : hour < 18 ? 'Good afternoon.' : 'Good evening.';
-  const askSub = offline
-    ? 'Wishlist & Size Intelligence questions run on local browser sample data. Start the server (npm start) for MongoDB persistence and live MCP tools.'
-    : !status
-      ? 'Weave reads only what a question needs, cites every record, and holds changes for your\u00a0OK.'
-      : status.mode === 'offline'
-        ? `Ask about your day or your Smart Wishlist & Size Profile using MCP servers (${wishlistEnabled ? 'MongoDB connected' : 'Wishlist switched off'}).${
-            status.planners?.nim?.credentials ? ' Switch to NVIDIA NIM to ask anything.' : ' Add NVIDIA_API_KEY in backend/.env to ask open-ended MCP questions.'
-          }`
-        : `NVIDIA NIM (${status.planners?.nim?.model ?? ''}) plans which MCP tools to call across all 5 apps, cites every record it reads, and holds changes for your OK.`;
+  const setMode = async (mode) => {
+    const r = await api('/api/mode', { mode });
+    if (r.ok) {
+      conn.setStatus(r.data);
+      showToast(mode === 'nvidia' ? 'NVIDIA will answer from now on.' : 'The offline demo will answer from now on.');
+    } else showToast(r.data?.error ?? 'Couldn’t switch. Nothing changed.');
+  };
+
+  const reset = async () => {
+    store.resetWishlistDemo();
+    papers.restoreSamples();
+    if (!conn.offline) {
+      const r = await api('/api/reset', {});
+      if (r.ok) await conn.resync(r.data);
+    }
+    chats.updateAllTurns((t) => ({ ...t, proposals: (t.proposals ?? []).map((p) => (p.status === 'pending' ? { ...p, status: 'expired' } : p)) }));
+    showToast('The sample data is back.');
+  };
+
+  const toggleTech = (on) => {
+    setTechDetails(on);
+    try {
+      localStorage.setItem(TECH, on ? '1' : '0');
+    } catch {
+      // setting lasts for this visit
+    }
+  };
+
+  const deleteChat = (chat) => {
+    chats.remove(chat.id);
+    showToast(`Deleted “${chat.title}”.`, { label: 'Undo', run: () => chats.restore(chat) });
+  };
+
+  /* ---------- Saved papers ---------- */
+
+  const saveItem = (item) => {
+    const result = papers.add(item);
+    if (result.ok) setFreshId(item.id);
+    return result;
+  };
+  const undoSave = (id) => {
+    const r = papers.remove(id);
+    showToast(r.ok ? 'Removed. That paper isn’t saved any more.' : 'Couldn’t remove it. It’s still in Saved.');
+  };
+  const deleteItem = (item) => {
+    const r = papers.remove(item.id);
+    if (r.ok) showToast(`Deleted “${item.title}”.`, { label: 'Undo', run: () => papers.add(item) });
+    else showToast('Couldn’t delete it. It’s still in Saved.');
+  };
+
+  /* ---------- Rendering ---------- */
+
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? 'Let’s get tomorrow sorted' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const names = conn.connected.map((s) => s.name);
+  const readiness = !conn.synced
+    ? 'Getting ready…'
+    : conn.offline
+      ? 'I can’t reach your connected services right now, but I can still help with what you’ve saved here.'
+      : names.length
+        ? `What can I help you keep track of? I can look at your ${joinNames(names)} and your saved papers.`
+        : 'Ask me anything, or add a photo of a receipt or warranty and I’ll keep track of it.';
+  const reminderCount = useMemo(
+    () => matchOccasions(store.wishlist, store.occasions, store.reminderPrefs).filter((m) => m.inWindow && !m.dismissed).length,
+    [store.wishlist, store.occasions, store.reminderPrefs],
+  );
+  const dockComposer = view === 'home' && (hasThread || narrow);
+  const pageTitle = view === 'home' ? chats.active?.title ?? '' : view === 'appliances' ? 'Appliances & Bills' : '';
+
+  const composer = (docked) => (
+    <Composer
+      value={question}
+      onChange={setQuestion}
+      onAsk={ask}
+      busy={busy}
+      voice={voice}
+      onFile={(file) => setUploadJob({ file })}
+      onSample={() => setUploadJob({ sample: true })}
+      docked={docked}
+      inputRef={inputRef}
+      openMenuSignal={addSignal}
+      connected={conn.connected}
+      offline={conn.offline}
+      status={conn.status}
+      onOpenConnections={(id) => openPanel('connections', id)}
+      onSetMode={setMode}
+      followUp={hasThread}
+    />
+  );
 
   return (
-    <>
-      <a className="skip" href="#main">Skip to content</a>
+    <div className={`shell${sideOpen ? '' : ' is-side-closed'}${drawer ? ' is-drawer' : ''}`}>
+      <a className="skip" href="#main">
+        Skip to content
+      </a>
 
-      <AppTopBar
-        status={status}
+      <Sidebar
+        chats={chats.chats}
+        activeId={view === 'home' ? chats.activeId : null}
+        onNew={newChat}
+        onOpenChat={(id) => {
+          chats.open(id);
+          goHome();
+        }}
+        onDeleteChat={deleteChat}
+        savedCount={papers.saved.length}
+        connected={conn.connected}
+        offline={conn.offline}
+        reminderCount={reminderCount}
+        onCollapse={toggleSidebar}
         busy={busy}
-        offline={offline}
-        reminderCount={activeReminderCount}
-        onSetMode={handleSetMode}
-        onReset={handleReset}
+        techDetails={techDetails}
+        onToggleTech={toggleTech}
+        onReset={reset}
+        onClearHistory={async () => {
+          chats.clearAll();
+          showToast('All conversations deleted.');
+        }}
       />
+      <button type="button" className="side-scrim" aria-label="Close menu" tabIndex={drawer ? 0 : -1} onClick={() => setDrawer(false)} />
 
       {view === 'connections' ? (
         <main className="wl-shell" id="main">
@@ -551,92 +658,107 @@ export function WorkspacePage() {
                       ask(questionText);
                     }
                   }}
-                />
-                <div className="composer-foot">
-                  <span className="composer-hint">
-                    <kbd>Enter</kbd> to ask, <kbd>Shift</kbd>&nbsp;+&nbsp;<kbd>Enter</kbd> for a new line
-                  </span>
-                  <button className="btn btn-primary" type="submit" disabled={busy}>
-                    {busy ? (
-                      <>
-                        <span className="spinner" aria-hidden="true" />
-                        <span>Asking</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Ask</span>
-                        <Icon name="i-enter" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
+      <div className="shell-main">
+        <header className="main-top">
+          <button type="button" className="side-icon main-toggle" onClick={toggleSidebar} aria-label="Open sidebar">
+            <Icon name="i-panel" />
+          </button>
+          <p className="main-title">{pageTitle}</p>
+          <button type="button" className="side-icon main-new" onClick={newChat} aria-label="New chat">
+            <Icon name="i-new" />
+          </button>
+        </header>
 
-              <div className="suggest" aria-label="Example questions">
-                {!offline &&
-                  (status?.suggestions ?? []).map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      disabled={busy}
-                      title={q}
-                      aria-label={`Ask: ${q}`}
-                      onClick={() => {
-                        setQuestionText(q);
-                        requestAnimationFrame(autosize);
-                        ask(q);
-                      }}
-                    >
-                      {SHORT[q] ?? q}
+        <main className={`main-scroll${view !== 'home' ? ' is-page' : ''}`} id="main" ref={scrollRef}>
+          {view === 'saved' ? (
+            <SavedPage saved={papers.saved} focusId={focus} freshId={freshId} onAsk={ask} onDelete={deleteItem} onAdd={openAddMenu} />
+          ) : view === 'connections' ? (
+            <ConnectionsPage
+              focusId={focus}
+              services={conn.services}
+              planned={conn.status?.planned}
+              offline={conn.offline}
+              pending={conn.pending}
+              onConnect={connect}
+              onDisconnect={disconnect}
+              onRetry={conn.reload}
+              techDetails={techDetails}
+              activity={activity}
+            />
+          ) : view === 'appliances' ? (
+            <AppliancesView enabled={conn.services.find((service) => service.id === 'appliances')?.state === 'connected'} />
+          ) : view === 'wishlist' ? (
+            <div className="wl-shell">
+              <WishlistView
+                wishlist={store.wishlist}
+                sizeProfile={store.sizeProfile}
+                occasions={store.occasions}
+                reminderPrefs={store.reminderPrefs}
+                onAdd={store.addItem}
+                onUpdate={store.updateItem}
+                onRemove={store.removeItem}
+                onDismissReminder={store.dismissReminder}
+                onGoToProfile={() => navigate('/app/size-profile')}
+              />
+            </div>
+          ) : view === 'size-profile' ? (
+            <div className="wl-shell">
+              <SizeProfileView
+                sizeProfile={store.sizeProfile}
+                wishlist={store.wishlist}
+                occasions={store.occasions}
+                reminderPrefs={store.reminderPrefs}
+                onSaveProfile={store.saveProfile}
+                onClearProfile={store.clearProfileMeasurements}
+                onUpdateReminderPrefs={store.updateReminderPrefs}
+                onAddOccasion={store.addOccasionEvent}
+                onOpenWishlist={() => navigate('/app/wishlist')}
+              />
+            </div>
+          ) : hasThread ? (
+            <div className="thread" ref={threadRef} aria-label={`Conversation: ${chats.active.title}`}>
+              {turns.map((t) => (
+                <Turn
+                  key={t.seq}
+                  turn={t}
+                  services={conn.services}
+                  saved={papers.saved}
+                  techDetails={techDetails}
+                  dismissing={dismissing}
+                  onApprove={handleApprove}
+                  onDismiss={handleDismiss}
+                  onUndoDismiss={handleUndoDismiss}
+                  onAsk={ask}
+                  onRetry={ask}
+                  onOpenSaved={(id) => openPanel('saved', id)}
+                  onOpenConnections={(id) => openPanel('connections', id)}
+                  onAddFile={openAddMenu}
+                  onOpenWishlist={() => navigate('/app/wishlist')}
+                  onTyped={(seq) => chats.updateTurn(seq, (x) => ({ ...x, fresh: false }))}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="home">
+              <section className="home-hero" aria-labelledby="greeting">
+                <h1 className="greeting" id="greeting">
+                  <LogoSymbol small className="greet-mark" />
+                  {greeting}
+                </h1>
+                <p className={`ready-line${conn.synced ? ' is-ready' : ''}`} aria-live="polite">
+                  {readiness}
+                </p>
+                <div className="starters" aria-label="Things you can ask">
+                  {STARTERS.map((q) => (
+                    <button key={q} type="button" className="ask-chip" onClick={() => ask(q)}>
+                      {q}
                     </button>
                   ))}
-                {WISHLIST_PROMPTS.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    className="is-wishlist"
-                    disabled={busy}
-                    title={q}
-                    aria-label={`Ask: ${q}`}
-                    onClick={() => {
-                      setQuestionText(q);
-                      requestAnimationFrame(autosize);
-                      ask(q);
-                    }}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-
-              {offline && (
-                <div className="notice" role="alert">
-                  <Icon name="i-alert" />
-                  <div>
-                    <strong>MCP backend is offline — Wishlist &amp; Size Q&amp;A is still active.</strong>
-                    <p>Start the Node server with npm start to also connect Calendar, Notes, Tasks and Money MCP servers.</p>
-                    <button className="btn btn-quiet btn-sm" type="button" onClick={loadStatus}>
-                      Try again
-                    </button>
-                  </div>
                 </div>
-              )}
-            </section>
+                {!narrow && composer(false)}
+              </section>
 
-            <RunView
-              ref={runRef}
-              run={run}
-              busy={busy}
-              litN={litN}
-              sizeProfile={sizeProfile}
-              onLight={light}
-              onOpenSource={openSource}
-              onApprove={handleApprove}
-              onDismiss={handleDismiss}
-              onInspectSize={handleInspectSize}
-              onOpenWishlist={() => navigate('/app/wishlist')}
-            />
-          </main>
+              {conn.firstRun && <Welcome services={conn.services} onConnectAll={connectAll} onChoose={() => openPanel('connections')} onLater={notNow} />}
 
           <InspectorPanel
             tab={tab}
@@ -653,25 +775,43 @@ export function WorkspacePage() {
           />
         </div>
       )}
+              <TodayPanel
+                glance={glance}
+                loading={!conn.synced || glanceLoading}
+                offline={conn.offline}
+                services={conn.services}
+                saved={papers.saved}
+                todayLabel={conn.status?.todayLabel ?? new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                onAsk={ask}
+                onOpenSaved={(id) => openPanel('saved', id)}
+                onOpenConnections={(id) => openPanel('connections', id)}
+                onAddFile={openAddMenu}
+              />
+            </div>
+          )}
+        </main>
 
-      {inspectedProduct && (
-        <SizeIntelligenceModal
-          product={inspectedProduct}
-          result={inspectedResult}
-          loading={inspectLoading}
-          unit={sizeProfile.unit}
-          onClose={() => {
-            setInspectedProduct(null);
-            setInspectedResult(null);
-            setInspectLoading(false);
-          }}
-          onGoToProfile={() => navigate('/app/size-profile')}
-        />
-      )}
-
-      <div className={`toast${toastOn ? ' is-on' : ''}`} role="status" aria-live="polite">
-        {toastMsg}
+        {dockComposer && <div className="dock">{composer(true)}</div>}
       </div>
-    </>
+
+      <UploadSheet
+        job={uploadJob}
+        onClose={() => setUploadJob(null)}
+        onSave={saveItem}
+        onUndoSave={undoSave}
+        onAsk={ask}
+        onOpenSaved={(id) => openPanel('saved', id)}
+        onNotSaved={() => showToast('Not saved. Nothing was kept.')}
+      />
+
+      <Toast
+        toast={toast}
+        onAction={() => {
+          toast?.action?.run();
+          setToast(null);
+        }}
+        onDismiss={() => setToast(null)}
+      />
+    </div>
   );
 }

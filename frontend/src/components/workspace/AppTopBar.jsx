@@ -10,12 +10,12 @@ export function AppTopBar({ status, busy, offline, reminderCount = 0, onSetMode,
   const options = status
     ? [
         {
-          id: 'nim',
-          label: 'NVIDIA NIM',
-          disabled: !status.planners?.nim?.credentials,
-          title: !status.planners?.nim?.credentials
-            ? 'No NVIDIA NIM API key found. Set NVIDIA_API_KEY in backend/.env and restart the server.'
-            : `Plan with NVIDIA NIM (${status.planners?.nim?.model ?? ''})`,
+          id: 'nvidia',
+          label: 'NVIDIA',
+          disabled: !status.planners.nvidia.credentials,
+          title: !status.planners.nvidia.credentials
+            ? 'No NVIDIA API key found. Set NVIDIA_API_KEY and restart the server.'
+            : 'Plan with NVIDIA',
         },
         {
           id: 'offline',
@@ -66,6 +66,12 @@ export function AppTopBar({ status, busy, offline, reminderCount = 0, onSetMode,
             className={({ isActive }) => `bar-nav-link${isActive ? ' is-active' : ''}`}
           >
             My Size Profile
+          </NavLink>
+          <NavLink
+            to="/app/appliances"
+            className={({ isActive }) => `bar-nav-link${isActive ? ' is-active' : ''}`}
+          >
+            Appliances
           </NavLink>
         </nav>
 

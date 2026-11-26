@@ -18,6 +18,10 @@ venv/
 dist/
 build/
 
+# Private appliance document originals (never committed)
+backend/uploads/
+backend/data/ocr/
+
 # Databases
 *.db
 *.sqlite

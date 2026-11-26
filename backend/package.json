@@ -8,17 +8,23 @@
     "start": "node --env-file-if-exists=.env src/server.js",
     "dev": "nodemon",
     "offline": "WEAVE_MODE=offline node --env-file-if-exists=.env src/server.js",
-    "smoke": "node --env-file-if-exists=.env scripts/smoke.js",
-    "test": "node scripts/test-size-matcher.js && node --env-file-if-exists=.env scripts/test-persistence.js"
+    "smoke": "node scripts/smoke.js",
+    "test": "node --env-file-if-exists=.env scripts/test-size-matcher.js && node --env-file-if-exists=.env scripts/test-nvidia-planner.js && node --env-file-if-exists=.env scripts/test-persistence.js && node --env-file-if-exists=.env scripts/test-appliances.js",
+    "test:appliances": "node --env-file-if-exists=.env scripts/test-appliances.js"
   },
   "engines": {
     "node": ">=22.5"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@napi-rs/canvas": "^0.1.80",
     "cors": "^2.8.6",
     "express": "^5.3.0",
     "mongoose": "^9.13.1",
+    "multer": "^2.5.0",
+    "openai": "^7.65.0",
+    "pdf-parse": "^2.4.5",
+    "tesseract.js": "^6.0.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
