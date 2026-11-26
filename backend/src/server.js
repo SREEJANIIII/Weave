@@ -23,7 +23,12 @@ const state = {
 };
 
 // Fields a person may edit on a draft before approving it.
-const EDITABLE = { create_task: ['title', 'due'], create_event: ['title', 'date', 'start', 'end'] };
+const EDITABLE = {
+  create_task: ['title', 'due'], create_event: ['title', 'date', 'start', 'end'],
+  save_wishlist_item: ['product_name', 'brand', 'product_url', 'image_url', 'category', 'occasion', 'notes', 'product_id'],
+  update_wishlist_item: ['product_name', 'brand', 'product_url', 'image_url', 'category', 'occasion', 'notes', 'product_id'],
+  update_size_profile: ['bust', 'waist', 'hips', 'shoulder', 'inseam', 'height', 'unit', 'preferred_fit', 'preferred_categories'],
+};
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
@@ -87,7 +92,7 @@ async function approve(id, changes = {}) {
   if (p.status !== 'pending') return [409, { error: `This draft is already ${p.status}.`, proposal: p }];
   const args = { ...p.args };
   for (const key of EDITABLE[p.tool] ?? []) {
-    if (changes[key] !== undefined && changes[key] !== null && String(changes[key]).trim() !== '') args[key] = String(changes[key]).trim();
+    if (changes[key] !== undefined && changes[key] !== null && (Array.isArray(changes[key]) || String(changes[key]).trim() !== '')) args[key] = Array.isArray(changes[key]) ? changes[key] : String(changes[key]).trim();
   }
   p.status = 'running';
   const res = await hub.call(p.server, p.tool, args, { summary: 'approved by you' });
@@ -96,12 +101,16 @@ async function approve(id, changes = {}) {
     return [200, { proposal: p }];
   }
   // Only report success after reading the new record back from the app.
-  const record = res.data?.task ?? res.data?.event ?? null;
-  const getter = { create_task: 'get_task', create_event: 'get_event' }[p.tool];
+  const record = res.data?.task ?? res.data?.event ?? res.data?.item ?? res.data?.profile ?? res.data?.deleted ?? null;
+  const getter = { create_task: 'get_task', create_event: 'get_event', save_wishlist_item: 'get_wishlist_item', update_wishlist_item: 'get_wishlist_item' }[p.tool];
   let verified = false;
   if (record?.id && getter) {
     const check = await hub.call(p.server, getter, { id: record.id }, { summary: 'read back to confirm' });
-    verified = !check.isError && (check.data?.task?.id === record.id || check.data?.event?.id === record.id);
+    verified = !check.isError && (check.data?.task?.id === record.id || check.data?.event?.id === record.id || check.data?.item?.id === record.id);
+  } else if (p.tool === 'update_size_profile') {
+    verified = !res.isError && Boolean(res.data?.profile);
+  } else if (p.tool === 'delete_wishlist_item') {
+    verified = !res.isError && Boolean(res.data?.deleted);
   }
   Object.assign(p, { status: verified ? 'done' : 'unverified', args, result: record, conflicts: res.data?.conflicts ?? [], decidedAt: new Date().toISOString() });
   return [200, { proposal: p }];
