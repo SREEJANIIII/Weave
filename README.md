@@ -13,9 +13,42 @@ Ask ──▶ Weave app ──▶ planner (Claude, or the offline script)
      cited answer + drafts ──▶ you approve ──▶ write runs ──▶ read back to confirm
 ```
 
+## Project layout
+
+```
+Weave/
+├── frontend/      The UI: plain HTML, CSS and JS modules (no build step)
+├── backend/       Node server, planners and the four MCP servers
+│   ├── src/           HTTP server, MCP client, planners
+│   ├── mcp-servers/   Calendar, Notes, Tasks, Money
+│   ├── lib/           Shared date helpers
+│   ├── data/          Optional statement CSV for the Money server
+│   ├── scripts/       Smoke test
+│   └── .env.example
+└── package.json   Shortcuts that run the backend's npm scripts
+```
+
 ## Run it
 
 Needs Node 22 or later. The Node app lives in `backend/`; `frontend/` is a plain static site with no build step and no `package.json` of its own.
+
+### 1. Install
+
+```bash
+npm install          # from the repo root; installs backend/ dependencies too
+```
+
+The frontend has no dependencies and no build step, so there is nothing to install for it.
+
+### 2. Start the backend (this also serves the frontend)
+
+From the repo root:
+
+```bash
+npm start            # or: npm run offline  (forces the offline planner)
+```
+
+Or from inside `backend/`:
 
 ```bash
 cd backend
@@ -23,7 +56,15 @@ npm install
 npm start
 ```
 
-Open <http://localhost:4321>.
+Then open <http://localhost:4321>.
+
+The backend serves the files in `frontend/` and the `/api/*` endpoints from the same address, so you don't start the frontend separately. The UI calls `/api/...` on the address it was loaded from, so opening `frontend/index.html` directly or serving it from another port won't work without a proxy to the backend.
+
+### 3. Working on the frontend
+
+Edit anything in `frontend/` and refresh the browser. The server reads the files from disk on each request, so you don't need to restart it. Changes in `backend/` need a restart (`Ctrl+C`, then `npm start`).
+
+### Planners
 
 - **Offline planner** (default when no key is found): a fixed script for the two demo questions. It makes the same real MCP calls and follows the same rules, but the reasoning is hand-written, so it only understands those two questions. Use it if the venue Wi-Fi is unreliable.
 - **Claude planner**: set a key, restart, and pick *Claude* in the top bar. Claude chooses which MCP tools to call and writes the cited answer.
@@ -31,11 +72,23 @@ Open <http://localhost:4321>.
 Still in `backend/`:
 
 ```bash
-cp .env.example .env               # then put your key in .env (or: ant auth login)
+cp backend/.env.example backend/.env   # then put your key in backend/.env (or: ant auth login)
 npm start
 ```
 
-Check everything still works end to end from `backend/` (offline, about 5 seconds):
+The `.env` file must be in `backend/`, because the start script reads it from there.
+
+### Port
+
+The default port is `4321`. To change it:
+
+```bash
+PORT=5000 npm start
+```
+
+### Smoke test
+
+Check everything still works end to end (offline, about 5 seconds):
 
 ```bash
 npm run smoke

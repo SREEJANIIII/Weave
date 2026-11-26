@@ -1,0 +1,11 @@
+{
+  "name": "weave",
+  "private": true,
+  "description": "Weave monorepo: frontend/ (static UI) and backend/ (Node server + MCP servers).",
+  "scripts": {
+    "postinstall": "npm --prefix backend install",
+    "start": "npm --prefix backend start",
+    "offline": "npm --prefix backend run offline",
+    "smoke": "npm --prefix backend run smoke"
+  }
+}
