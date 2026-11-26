@@ -1,0 +1,9 @@
+{
+  "watch": ["src", "mcp-servers", "lib", "models", "repositories", "db", ".env"],
+  "ext": "js,mjs,json,env",
+  "ignore": ["scripts/*", "data/*", "node_modules/*"],
+  "delay": "400",
+  "signal": "SIGTERM",
+  "exec": "node --env-file-if-exists=.env src/server.js"
+}
+

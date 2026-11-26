@@ -5,10 +5,11 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const backendDir = path.join(root, 'backend');
 const frontendDir = path.join(root, 'frontend');
+const nodemonBin = path.join(backendDir, 'node_modules', 'nodemon', 'bin', 'nodemon.js');
 const viteBin = path.join(frontendDir, 'node_modules', 'vite', 'bin', 'vite.js');
 
 const children = [
-  spawn(process.execPath, ['--env-file-if-exists=.env', 'src/server.js'], {
+  spawn(process.execPath, [nodemonBin], {
     cwd: backendDir,
     stdio: 'inherit',
   }),

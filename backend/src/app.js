@@ -49,7 +49,8 @@ export function createApp({ root, hub, proposals, state, port }) {
     next();
   });
 
-  // JSON body parsing with the same 64 KB ceiling as the old readJson helper.
+  // Allow larger payloads for .ics / .csv / Markdown file imports under /api/connections; keep 64 KB cap elsewhere.
+  app.use('/api/connections', express.json({ limit: '2mb', strict: false }));
   app.use('/api', express.json({ limit: '64000b', strict: false }));
   app.use('/api', createApiRouter({ hub, proposals, state }));
 

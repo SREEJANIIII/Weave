@@ -7,6 +7,7 @@ import { InspectorPanel } from '../components/workspace/InspectorPanel';
 import { WishlistView } from '../components/wishlist/WishlistView';
 import { SizeProfileView } from '../components/profile/SizeProfileView';
 import { SizeIntelligenceModal } from '../components/wishlist/SizeIntelligenceModal';
+import { ConnectionsView } from '../components/connections/ConnectionsView';
 import { SHORT } from '../lib/formatters';
 import { matchOccasions } from '../lib/occasionMatcher';
 import { buildWishlistRunResponse, isWishlistQuery } from '../lib/wishlistContextQA';
@@ -40,7 +41,9 @@ export function WorkspacePage() {
     ? 'wishlist'
     : location.pathname.startsWith('/app/size-profile')
       ? 'size-profile'
-      : 'ask';
+      : location.pathname.startsWith('/app/connections')
+        ? 'connections'
+        : 'ask';
 
   usePageMeta({
     page: 'app',
@@ -49,7 +52,9 @@ export function WorkspacePage() {
         ? 'Weave — Smart Wishlist'
         : view === 'size-profile'
           ? 'Weave — My Size Profile'
-          : 'Weave prototype: ask across your apps',
+          : view === 'connections'
+            ? 'Weave — Apps & Data Sources'
+            : 'Weave prototype: ask across your apps',
     description:
       'Ask one question across your connected apps, manage your Smart Wishlist & Size Intelligence, and approve changes before anything runs.',
   });
@@ -458,7 +463,19 @@ export function WorkspacePage() {
         onReset={handleReset}
       />
 
-      {view === 'wishlist' ? (
+      {view === 'connections' ? (
+        <main className="wl-shell" id="main">
+          <ConnectionsView
+            initialApp={searchParams.get('app') || 'calendar'}
+            offline={offline}
+            onNotify={showToast}
+            onDataChanged={async () => {
+              await loadStatus();
+              await refreshAll();
+            }}
+          />
+        </main>
+      ) : view === 'wishlist' ? (
         <main className="wl-shell" id="main">
           <WishlistView
             wishlist={wishlist}
@@ -632,6 +649,7 @@ export function WorkspacePage() {
             litN={litN}
             sourceRefs={sourceRefs}
             onToggleApp={handleToggleApp}
+            onOpenConnections={(appId) => navigate(`/app/connections?app=${encodeURIComponent(appId)}`)}
           />
         </div>
       )}

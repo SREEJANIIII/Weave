@@ -1,11 +1,14 @@
 #!/usr/bin/env node
-// Weave demo MCP server: Tasks (sample data, in memory).
+// Weave MCP server: Tasks (MongoDB-backed; supports manual tasks, checklist imports, and seeded sample tasks).
 import * as z from 'zod/v4';
 import { createServer, ok, fail, serve, READ, WRITE, DATE_RE } from './lib/kit.js';
-import { tasks as sampleTasks } from './lib/sample-data.js';
+import { connectDatabase, closeDatabase } from '../db/database.js';
+import { AppDataRepository } from '../repositories/app-data-repository.js';
 
-const tasks = sampleTasks();
-let created = 0;
+await connectDatabase();
+const repo = new AppDataRepository();
+await repo.ensureTasksSeeded();
+
 const server = createServer('weave-tasks');
 
 const byDue = (a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999') || a.id.localeCompare(b.id);
@@ -24,6 +27,7 @@ server.registerTool(
     annotations: READ,
   },
   async ({ status = 'open', due_on_or_before, list }) => {
+    const tasks = await repo.listTasks();
     const result = tasks
       .filter((t) => status === 'all' || t.status === status)
       .filter((t) => !due_on_or_before || (t.due && t.due <= due_on_or_before))
@@ -42,7 +46,7 @@ server.registerTool(
     annotations: READ,
   },
   async ({ id }) => {
-    const task = tasks.find((t) => t.id === id);
+    const task = await repo.getTask(id);
     return task ? ok({ task }) : fail(`No task with id ${id}.`);
   },
 );
@@ -61,13 +65,25 @@ server.registerTool(
     annotations: WRITE,
   },
   async ({ title, due, list = 'Inbox', notes = '' }) => {
+    const tasks = await repo.listTasks();
     const duplicate = tasks.find((t) => t.status === 'open' && normalise(t.title) === normalise(title));
     if (duplicate) return fail(`An open task with this title already exists (${duplicate.id}).`);
-    created += 1;
-    const task = { id: `t_${200 + created}`, kind: 'task', title, due: due ?? null, list, status: 'open', notes, created_by: 'Weave (approved by you)' };
-    tasks.push(task);
+    const task = await repo.createTask({
+      title,
+      due: due ?? null,
+      list,
+      notes,
+      status: 'open',
+      createdBy: 'Weave (approved by you)',
+    });
     return ok({ task });
   },
 );
 
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, async () => {
+    await closeDatabase();
+    process.exit(0);
+  });
+}
 await serve(server);

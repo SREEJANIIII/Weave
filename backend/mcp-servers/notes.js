@@ -1,16 +1,20 @@
 #!/usr/bin/env node
-// Weave demo MCP server: Notes (sample data, read-only).
+// Weave MCP server: Notes (MongoDB-backed, read-only; supports imported Markdown folders/files and seeded sample notes).
 import * as z from 'zod/v4';
 import { createServer, ok, fail, serve, READ } from './lib/kit.js';
-import { notes as sampleNotes } from './lib/sample-data.js';
 import { now, isoDate, addDays } from '../lib/dates.js';
+import { connectDatabase, closeDatabase } from '../db/database.js';
+import { AppDataRepository } from '../repositories/app-data-repository.js';
 
-const notes = sampleNotes();
+await connectDatabase();
+const repo = new AppDataRepository();
+await repo.ensureNotesSeeded();
+
 const server = createServer('weave-notes');
 
 const ACTION_RE = /^- \[( |x)\] @(\S+) (.+)$/;
 function actionItems(body) {
-  return body
+  return String(body ?? '')
     .split('\n')
     .map((line) => line.match(ACTION_RE))
     .filter(Boolean)
@@ -32,13 +36,14 @@ server.registerTool(
     title: 'List recent notes',
     description: 'List notes edited in the last N days (newest first), optionally only those with a tag such as "meeting".',
     inputSchema: {
-      days: z.number().int().min(1).max(90).optional().describe('Look-back window in days (default 7)'),
+      days: z.number().int().min(1).max(365).optional().describe('Look-back window in days (default 7)'),
       tag: z.string().optional().describe('Only notes with this tag, e.g. "meeting"'),
     },
     annotations: READ,
   },
   async ({ days = 7, tag }) => {
     const since = isoDate(addDays(now(), -days));
+    const notes = await repo.listNotes();
     const list = notes
       .filter((n) => n.updated >= since && (!tag || n.tags.includes(tag.toLowerCase())))
       .sort((a, b) => b.updated.localeCompare(a.updated))
@@ -61,6 +66,7 @@ server.registerTool(
   async ({ query, limit = 5 }) => {
     const terms = query.toLowerCase().split(/\W+/).filter((t) => t.length > 2);
     if (!terms.length) return fail('Use at least one word of three or more letters.');
+    const notes = await repo.listNotes();
     const scored = notes
       .map((n) => {
         const title = n.title.toLowerCase();
@@ -91,10 +97,16 @@ server.registerTool(
     annotations: READ,
   },
   async ({ id }) => {
-    const n = notes.find((x) => x.id === id);
+    const n = await repo.getNote(id);
     if (!n) return fail(`No note with id ${id}.`);
     return ok({ note: { ...n, action_items: actionItems(n.body) } });
   },
 );
 
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, async () => {
+    await closeDatabase();
+    process.exit(0);
+  });
+}
 await serve(server);

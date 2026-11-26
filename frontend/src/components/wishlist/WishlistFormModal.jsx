@@ -20,6 +20,7 @@ export function WishlistFormModal({ initialItem, syncMode = 'local', onSave, onC
   const [status, setStatus] = useState(initialItem?.status ?? 'saved');
   const [notes, setNotes] = useState(initialItem?.notes ?? '');
   const [saving, setSaving] = useState(false);
+  const [fetchingMeta, setFetchingMeta] = useState(false);
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
@@ -131,14 +132,49 @@ export function WishlistFormModal({ initialItem, syncMode = 'local', onSave, onC
 
             <div className="field">
               <label htmlFor="wl-url">Product URL{syncMode === 'backend' ? ' *' : ''}</label>
-              <input
-                id="wl-url"
-                type="url"
-                required={syncMode === 'backend'}
-                placeholder="https://..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-              />
+              <div className="cn-inline-form">
+                <input
+                  id="wl-url"
+                  type="url"
+                  required={syncMode === 'backend'}
+                  placeholder="https://..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                />
+                {syncMode === 'backend' && (
+                  <button
+                    type="button"
+                    className="btn btn-quiet btn-sm"
+                    disabled={fetchingMeta || !url.trim()}
+                    onClick={async () => {
+                      setFetchingMeta(true);
+                      setFormError('');
+                      try {
+                        const res = await fetch('/api/connections/wishlist/preview-url', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ url: url.trim() }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) setFormError(data.error || 'Preview unavailable.');
+                        else {
+                          const m = data.meta ?? {};
+                          if (m.name && !name.trim()) setName(m.name);
+                          if (m.brand && !brand.trim()) setBrand(m.brand);
+                          if (m.image) setImage(m.image);
+                          if (m.price !== undefined && !price) setPrice(String(m.price));
+                        }
+                      } catch {
+                        setFormError('Could not preview product URL.');
+                      } finally {
+                        setFetchingMeta(false);
+                      }
+                    }}
+                  >
+                    {fetchingMeta ? 'Reading...' : 'Auto-fill'}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="field">

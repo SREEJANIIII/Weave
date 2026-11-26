@@ -1,49 +1,41 @@
 #!/usr/bin/env node
-// Weave demo MCP server: Money (read-only).
-// Reads a statement CSV you provide (WEAVE_STATEMENT_CSV or data/statement.csv: date,merchant,amount,category).
-// Without one it serves generated sample transactions. It never connects to a bank or payment app.
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+// Weave MCP server: Money (MongoDB-backed read-only; reads uploaded CSV statements, data/statement.csv, or seeded sample data).
 import * as z from 'zod/v4';
 import { createServer, ok, fail, serve, READ, DATE_RE } from './lib/kit.js';
-import { transactions as sampleTransactions } from './lib/sample-data.js';
 import { fmtDay } from '../lib/dates.js';
+import { connectDatabase, closeDatabase } from '../db/database.js';
+import { AppDataRepository } from '../repositories/app-data-repository.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const csvPath = process.env.WEAVE_STATEMENT_CSV || path.join(here, '..', 'data', 'statement.csv');
+await connectDatabase();
+const repo = new AppDataRepository();
+await repo.ensureMoneySeeded();
 
-function loadCsv(file) {
-  const [header, ...rows] = fs.readFileSync(file, 'utf8').trim().split(/\r?\n/);
-  const cols = header.toLowerCase().split(',').map((c) => c.trim());
-  const at = (name) => cols.indexOf(name);
-  return rows.map((row, i) => {
-    const cells = row.split(',').map((c) => c.trim());
-    return {
-      id: `txn_csv_${i + 1}`,
-      kind: 'transaction',
-      date: cells[at('date')],
-      merchant: cells[at('merchant')],
-      amount: Math.abs(Number(cells[at('amount')])),
-      category: cells[at('category')] || 'Other',
-    };
-  });
-}
+// Categories are user-supplied (e.g. an uploaded CSV may simply say "Food"),
+// so group names cover common labels and matching is substring-based.
+const GROUPS = {
+  food: ['Food', 'Groceries', 'Dining out', 'Food delivery', 'Dining', 'Cafe', 'Restaurant'],
+};
 
-const fromFile = fs.existsSync(csvPath);
-const transactions = fromFile ? loadCsv(csvPath) : sampleTransactions();
-const SOURCE = fromFile ? { type: 'imported file', name: path.basename(csvPath) } : { type: 'sample data', name: 'generated sample statement' };
-const GROUPS = { food: ['Groceries', 'Dining out', 'Food delivery'] };
+const normalize = (value) => String(value ?? '').trim().toLowerCase();
 
 function expand(categories) {
   if (!categories?.length) return null;
-  return categories.flatMap((c) => GROUPS[c.toLowerCase()] ?? [c]).map((c) => c.toLowerCase());
+  return categories.flatMap((c) => GROUPS[normalize(c)] ?? [c]).map(normalize).filter(Boolean);
 }
-function select(start_date, end_date, categories) {
+
+function matchesCategory(category, wanted) {
+  if (!wanted) return true;
+  const c = normalize(category);
+  if (!c) return false;
+  return wanted.some((w) => c.includes(w) || w.includes(c));
+}
+
+async function select(start_date, end_date, categories) {
+  const transactions = await repo.listTransactions();
   const wanted = expand(categories);
   return transactions
     .filter((t) => t.date >= start_date && t.date <= end_date)
-    .filter((t) => !wanted || wanted.includes(t.category.toLowerCase()))
+    .filter((t) => matchesCategory(t.category, wanted))
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 }
 
@@ -67,13 +59,13 @@ server.registerTool(
   },
   async ({ start_date, end_date, categories }) => {
     if (end_date < start_date) return fail('end_date must not be before start_date.');
-    const list = select(start_date, end_date, categories);
+    const [list, source] = await Promise.all([select(start_date, end_date, categories), repo.getMoneySource()]);
     const sum = (xs) => xs.reduce((s, t) => s + t.amount, 0);
     const group = (key) =>
       Object.entries(Object.groupBy(list, (t) => t[key])).map(([k, xs]) => ({ [key]: k, total: sum(xs), count: xs.length }));
     const label = categories?.length ? categories.join(', ') : 'All';
     return ok({
-      source: SOURCE,
+      source,
       currency: 'INR',
       summary: {
         id: `sum_${start_date}_${end_date}_${label.toLowerCase().replace(/\W+/g, '-')}`,
@@ -99,8 +91,15 @@ server.registerTool(
   },
   async ({ start_date, end_date, categories }) => {
     if (end_date < start_date) return fail('end_date must not be before start_date.');
-    return ok({ source: SOURCE, currency: 'INR', transactions: select(start_date, end_date, categories) });
+    const [transactions, source] = await Promise.all([select(start_date, end_date, categories), repo.getMoneySource()]);
+    return ok({ source, currency: 'INR', transactions });
   },
 );
 
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, async () => {
+    await closeDatabase();
+    process.exit(0);
+  });
+}
 await serve(server);

@@ -49,6 +49,12 @@ export function AppTopBar({ status, busy, offline, reminderCount = 0, onSetMode,
             Ask Weave
           </NavLink>
           <NavLink
+            to="/app/connections"
+            className={({ isActive }) => `bar-nav-link${isActive ? ' is-active' : ''}`}
+          >
+            Apps &amp; Sources
+          </NavLink>
+          <NavLink
             to="/app/wishlist"
             className={({ isActive }) => `bar-nav-link${isActive ? ' is-active' : ''}`}
           >

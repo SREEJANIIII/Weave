@@ -5,6 +5,8 @@ import { Run } from '../run.js';
 import { runOffline, DEMO_QUESTIONS } from '../agent-offline.js';
 import { runNim, explainError, hasCredentials, MODEL, BASE_URL } from '../agent-nim.js';
 import { now, isoDate, fmtLongDate } from '../../lib/dates.js';
+import { AppDataRepository } from '../../repositories/app-data-repository.js';
+import { createConnectionsRouter } from './connections.js';
 
 // Fields a person may edit on a draft before approving it.
 const EDITABLE = {
@@ -14,8 +16,26 @@ const EDITABLE = {
   update_size_profile: ['bust', 'waist', 'hips', 'shoulder', 'inseam', 'height', 'unit', 'preferred_fit', 'preferred_categories'],
 };
 
-export function statusPayload({ hub, state }) {
+export async function statusPayload({ hub, state, appData }) {
   const T = now();
+  let connections = {};
+  if (appData) {
+    try {
+      connections = await appData.getConnectionsSummary();
+    } catch {
+      connections = {};
+    }
+  }
+  const apps = hub.status().map((a) => {
+    if (a.id === 'wishlist') return { ...a, data: 'MongoDB', sourceType: 'mongodb' };
+    const conn = connections[a.id];
+    return {
+      ...a,
+      data: conn?.sourceName ?? a.data,
+      sourceType: conn?.sourceType ?? 'sample',
+      providers: conn?.providers ?? ['sample'],
+    };
+  });
   return {
     today: isoDate(T),
     todayLabel: fmtLongDate(T),
@@ -26,7 +46,7 @@ export function statusPayload({ hub, state }) {
       nim: { model: MODEL, baseUrl: BASE_URL, credentials: hasCredentials() },
       offline: { questions: DEMO_QUESTIONS },
     },
-    apps: hub.status(),
+    apps,
     planned: PLANNED,
     suggestions: DEMO_QUESTIONS,
   };
@@ -70,8 +90,9 @@ async function approve(hub, proposals, id, changes = {}) {
 
 export function createApiRouter({ hub, proposals, state }) {
   const router = Router();
+  const appData = new AppDataRepository();
 
-  router.get('/status', (req, res) => res.json(statusPayload({ hub, state })));
+  router.get('/status', async (req, res) => res.json(await statusPayload({ hub, state, appData })));
   router.get('/activity', (req, res) => res.json({ activity: hub.activity.slice(-150) }));
 
   router.post('/ask', async (req, res) => {
@@ -115,23 +136,24 @@ export function createApiRouter({ hub, proposals, state }) {
     return res.json({ proposal: p });
   });
 
-  router.post('/apps/:id', (req, res) => {
+  router.post('/apps/:id', async (req, res) => {
     const { enabled } = req.body ?? {};
     hub.setEnabled(req.params.id, enabled);
-    res.json(statusPayload({ hub, state }));
+    res.json(await statusPayload({ hub, state, appData }));
   });
 
-  router.post('/mode', (req, res) => {
+  router.post('/mode', async (req, res) => {
     const { mode } = req.body ?? {};
     if (!['nim', 'offline'].includes(mode)) return res.status(400).json({ error: 'Unknown planner.' });
     state.mode = mode;
-    res.json(statusPayload({ hub, state }));
+    res.json(await statusPayload({ hub, state, appData }));
   });
 
   router.post('/reset', async (req, res) => {
     proposals.clear();
+    await appData.resetAllDemo();
     await hub.restart();
-    res.json(statusPayload({ hub, state }));
+    res.json(await statusPayload({ hub, state, appData }));
   });
 
   // Direct MCP-backed workspace routes for Wishlist UI, Size Profile, Size Intelligence, Reminders & Occasions.
@@ -258,6 +280,8 @@ export function createApiRouter({ hub, proposals, state }) {
     if (r.isError) return res.status(400).json({ error: r.text });
     return res.json(r.data);
   });
+
+  router.use(createConnectionsRouter({ appData }));
 
   // Unknown API routes keep the original JSON 404 contract.
   router.use((req, res) => res.status(404).json({ error: 'Not found' }));

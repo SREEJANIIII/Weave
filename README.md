@@ -61,7 +61,7 @@ Then open <http://localhost:4321> (with `npm start`) or <http://127.0.0.1:5173> 
 
 ### 3. Working on the frontend
 
-Run `npm run dev` from the repo root for instant React HMR while talking to the live MCP backend, or run `npm run build` to rebuild `frontend/dist` for `npm start`. Changes in `backend/` need a server restart.
+Run `npm run dev` from the repo root for instant React HMR alongside automatic `nodemon` backend restarts (or `npm --prefix backend run dev` for the backend alone), or run `npm run build` to rebuild `frontend/dist` for `npm start`.
 
 ### Planners
 

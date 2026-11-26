@@ -562,11 +562,118 @@ html[data-page="app"] .wl-inline-info { display: grid; gap: 2px; min-width: 0; }
 html[data-page="app"] .wl-inline-brand { font-size: var(--app-xs); color: var(--color-muted); }
 html[data-page="app"] .wl-inline-info strong { font-size: var(--app-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* App Connectors & Sources Hub */
+html[data-page="app"] .cn-planned-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
+html[data-page="app"] .cn-tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: var(--space-xs); }
+html[data-page="app"] .cn-tab {
+  display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); text-align: left; cursor: pointer;
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-3);
+  transition: border-color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
+}
+html[data-page="app"] .cn-tab:hover { border-color: var(--color-ink); }
+html[data-page="app"] .cn-tab.is-on { border-color: var(--color-ink); background: var(--color-paper-2); box-shadow: inset 0 -2px 0 var(--yarn, var(--color-ink)); }
+html[data-page="app"] .cn-tab-text { display: grid; gap: 2px; min-width: 0; }
+html[data-page="app"] .cn-tab-text strong { font-size: var(--app-sm); }
+html[data-page="app"] .cn-tab-text small { font-size: var(--app-xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[data-page="app"] .cn-header-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-md); }
+html[data-page="app"] .cn-header-bar h2 { font-family: var(--font-display); font-size: var(--app-xl); }
+html[data-page="app"] .cn-source-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+html[data-page="app"] .cn-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+html[data-page="app"] .cn-forms { display: grid; gap: var(--space-md); }
+html[data-page="app"] .cn-forms .sp-card h3,  html[data-page="app"] .cn-grid > .sp-card h3 { font-family: var(--font-display); font-size: var(--app-lg); }
+html[data-page="app"] .cn-inline-form { display: flex; gap: var(--space-xs); align-items: center; }
+html[data-page="app"] .cn-inline-form input {
+  flex: 1; min-width: 0; min-height: 34px; padding: 0 var(--space-sm);
+  border: 1px solid var(--color-edge); border-radius: var(--radius-chip); background: var(--color-paper); font-size: var(--app-xs);
+}
+html[data-page="app"] .cn-stack-form { display: grid; gap: var(--space-xs); }
+html[data-page="app"] .cn-stack-form textarea,  html[data-page="app"] .cn-forms textarea {
+  width: 100%; padding: var(--space-xs) var(--space-sm); border: 1px solid var(--color-edge); border-radius: var(--radius-inner);
+  background: var(--color-paper); font-family: var(--font-mono); font-size: var(--app-xs);
+}
+html[data-page="app"] .cn-btn-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+html[data-page="app"] .cn-file-btn { justify-self: start; }
+html[data-page="app"] .cn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xs); max-height: 540px; overflow-y: auto; }
+html[data-page="app"] .cn-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm); border: 1px solid var(--color-rule); border-radius: var(--radius-inner); background: var(--color-paper);
+}
+html[data-page="app"] .cn-list li strong { display: block; font-size: var(--app-sm); }
+html[data-page="app"] .cn-list li strong.is-done { text-decoration: line-through; color: var(--color-muted); }
+html[data-page="app"] .cn-list li span { font-size: var(--app-xs); color: var(--color-muted); }
+html[data-page="app"] .cn-task-row { display: flex; align-items: center; gap: var(--space-xs); cursor: pointer; min-width: 0; }
+html[data-page="app"] .cn-ext-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-md); }
+html[data-page="app"] .cn-conn-strip { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+html[data-page="app"] .cn-conn-pill {
+  display: inline-flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-3);
+}
+html[data-page="app"] .cn-conn-pill strong { display: block; font-size: var(--app-xs); }
+html[data-page="app"] .cn-conn-pill span { font-size: 0.7rem; color: var(--color-muted); }
+html[data-page="app"] .cn-conn-actions { display: inline-flex; align-items: center; gap: var(--space-2xs); margin-left: var(--space-xs); }
+html[data-page="app"] .cn-providers { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-xs); }
+html[data-page="app"] .cn-provider-card {
+  display: grid; gap: 2px; padding: var(--space-xs) var(--space-sm); text-align: left; cursor: pointer;
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-inner); background: var(--color-paper);
+  transition: border-color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
+}
+html[data-page="app"] .cn-provider-card:hover { border-color: var(--color-ink); }
+html[data-page="app"] .cn-provider-card.is-on { border-color: var(--color-ink); background: var(--color-paper-2); box-shadow: inset 0 -2px 0 var(--color-ink); }
+html[data-page="app"] .cn-provider-card strong { font-size: var(--app-xs); }
+html[data-page="app"] .cn-provider-tag { font-size: 0.6875rem; color: var(--color-muted); }
+html[data-page="app"] .cn-guide { padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-inner); background: var(--color-paper-2); border: 1px solid var(--color-rule); display: grid; gap: 4px; }
+html[data-page="app"] .cn-guide ol { margin: 0; padding-left: 1.15rem; font-size: var(--app-xs); color: var(--color-ink-2); display: grid; gap: 2px; }
+html[data-page="app"] .cn-caldav-box { display: grid; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px dashed var(--color-rule-strong); }
+html[data-page="app"] .cn-caldav-box h4 { font-size: var(--app-xs); font-family: var(--font-body); font-weight: 600; color: var(--color-ink-2); }
+html[data-page="app"] .cn-oauth-box { padding: var(--space-xs) 0; }
+html[data-page="app"] .cn-active-strip {
+  display: grid; gap: var(--space-xs); padding: var(--space-md);
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-2);
+}
+html[data-page="app"] .cn-strip-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+html[data-page="app"] .cn-strip-head h2 { font-family: var(--font-display); font-size: var(--app-lg); }
+html[data-page="app"] .cn-conn-pills { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+html[data-page="app"] .cn-conn-pill {
+  display: inline-flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-card); background: var(--color-paper-3);
+}
+html[data-page="app"] .cn-conn-pill strong { display: block; font-size: var(--app-xs); }
+html[data-page="app"] .cn-conn-pill small { display: block; font-size: 0.7rem; color: var(--color-muted); }
+html[data-page="app"] .cn-provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-xs); }
+html[data-page="app"] .cn-provider-card {
+  display: grid; gap: 2px; padding: var(--space-xs) var(--space-sm); text-align: left; cursor: pointer;
+  border: 1px solid var(--color-rule-strong); border-radius: var(--radius-inner); background: var(--color-paper);
+}
+html[data-page="app"] .cn-provider-card:hover { border-color: var(--color-ink); }
+html[data-page="app"] .cn-provider-card.is-on { border-color: var(--color-ink); background: var(--color-paper-2); box-shadow: inset 0 -2px 0 var(--color-ink); }
+html[data-page="app"] .cn-provider-card strong { font-size: var(--app-xs); }
+html[data-page="app"] .cn-provider-card span { font-size: 0.6875rem; color: var(--color-muted); }
+html[data-page="app"] .cn-provider-box {
+  display: grid; gap: var(--space-sm); padding: var(--space-sm);
+  border: 1px solid var(--color-rule); border-radius: var(--radius-inner); background: var(--color-paper);
+}
+html[data-page="app"] .cn-checkbox { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--app-xs); color: var(--color-ink-2); cursor: pointer; }
+html[data-page="app"] .cn-oauth-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+html[data-page="app"] .cn-caldav-box {
+  display: grid; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px dashed var(--color-rule-strong);
+}
+html[data-page="app"] .cn-caldav-box h4 { font-size: var(--app-xs); font-weight: 600; color: var(--color-ink); }
+
+/* Google Keep OAuth connect block */
+html[data-page="app"] .cn-keep-connect { display: grid; gap: var(--space-xs); }
+html[data-page="app"] .cn-oauth-btn { display: inline-flex; align-items: center; gap: var(--space-xs); text-decoration: none; justify-content: center; }
+html[data-page="app"] .cn-oauth-hint { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) var(--space-sm); background: var(--color-paper-2); border: 1px solid var(--color-rule); border-radius: var(--radius-inner); font-size: var(--app-xs); color: var(--color-ink-2); }
+html[data-page="app"] .cn-oauth-hint code { font-family: ui-monospace, monospace; font-size: 0.75em; background: var(--color-rule); padding: 1px 4px; border-radius: 3px; }
+html[data-page="app"] .cn-keep-or { display: flex; align-items: center; gap: var(--space-sm); font-size: var(--app-xs); color: var(--color-muted); }
+html[data-page="app"] .cn-keep-or::before, html[data-page="app"] .cn-keep-or::after { content: ''; flex: 1; height: 1px; background: var(--color-rule-strong); }
+html[data-page="app"] .btn-outline { background: transparent; border: 1px solid var(--color-rule-strong); color: var(--color-ink); }
+html[data-page="app"] .btn-outline:hover { border-color: var(--color-ink); background: var(--color-paper-2); }
+
 @media (max-width: 64rem) {
   html[data-page="app"] .bar-inner { flex-wrap: wrap; height: auto; padding-block: var(--space-xs); }
   html[data-page="app"] .bar-nav { order: 3; width: 100%; justify-content: center; overflow-x: auto; }
   html[data-page="app"] .wl-shell { padding: var(--space-lg) var(--space-md) var(--space-xl); }
-  html[data-page="app"] .sp-grid { grid-template-columns: minmax(0, 1fr); }
+  html[data-page="app"] .sp-grid,  html[data-page="app"] .cn-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 40rem) {
   html[data-page="app"] .wl-form-grid,  html[data-page="app"] .sp-fields,  html[data-page="app"] .sp-fit-options,  html[data-page="app"] .sp-add-occ-row { grid-template-columns: minmax(0, 1fr); }

@@ -15,6 +15,7 @@ export function InspectorPanel({
   litN,
   sourceRefs,
   onToggleApp,
+  onOpenConnections,
 }) {
   const tabRefs = useRef({});
   const switchRefs = useRef({});
@@ -119,10 +120,7 @@ export function InspectorPanel({
                 const on = a.enabled && a.status === 'connected';
                 const broken = a.status !== 'connected';
                 const reads = a.tools.filter((t) => t.readOnly).length;
-                const dataLabel =
-                  a.id === 'wishlist'
-                    ? 'MongoDB'
-                    : 'sample data';
+                const dataLabel = a.data || (a.id === 'wishlist' ? 'MongoDB' : 'sample data');
                 const line = broken
                   ? `Couldn't connect: ${a.error ?? a.status}`
                   : a.enabled
@@ -163,13 +161,29 @@ export function InspectorPanel({
                             </li>
                           ))}
                         </ul>
+                        {onOpenConnections && (
+                          <button
+                            type="button"
+                            className="btn btn-link btn-sm"
+                            onClick={() => onOpenConnections(a.id === 'wishlist' ? 'calendar' : a.id)}
+                          >
+                            {a.id === 'wishlist' ? 'Connect calendar or data sources →' : `Connect real ${a.name} data →`}
+                          </button>
+                        )}
                       </details>
                     )}
                   </li>
                 );
               })}
             </ul>
-            <h2>Planned, not connected</h2>
+            <div className="cn-planned-head">
+              <h2>Planned, not connected</h2>
+              {onOpenConnections && (
+                <button type="button" className="btn btn-link btn-sm" onClick={() => onOpenConnections('external')}>
+                  How to connect →
+                </button>
+              )}
+            </div>
             <ul className="planned">
               {(status.planned ?? []).map((p) => (
                 <li key={p.id}>

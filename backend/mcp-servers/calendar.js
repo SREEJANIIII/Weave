@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-// Weave demo MCP server: Calendar (sample data, in memory).
+// Weave MCP server: Calendar (MongoDB-backed; supports imported .ics calendars, manual events, and seeded sample data).
 import * as z from 'zod/v4';
 import { createServer, ok, fail, serve, READ, WRITE, DATE_RE, TIME_RE } from './lib/kit.js';
-import { calendarEvents } from './lib/sample-data.js';
 import { toMinutes, fromMinutes } from '../lib/dates.js';
+import { connectDatabase, closeDatabase } from '../db/database.js';
+import { AppDataRepository } from '../repositories/app-data-repository.js';
 
-const events = calendarEvents();
-let created = 0;
-const byStart = (a, b) => `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`);
+await connectDatabase();
+const repo = new AppDataRepository();
+await repo.ensureCalendarSeeded();
+
 const server = createServer('weave-calendar');
 
 server.registerTool(
@@ -26,7 +28,8 @@ server.registerTool(
     const from = date ?? start_date;
     const to = date ?? end_date ?? start_date;
     if (!from) return fail('Pass either date, or start_date and end_date.');
-    return ok({ from, to, events: events.filter((e) => e.date >= from && e.date <= to).sort(byStart) });
+    const events = await repo.listEvents({ date, start_date, end_date });
+    return ok({ from, to, events });
   },
 );
 
@@ -49,7 +52,7 @@ server.registerTool(
     const lo = toMinutes(not_before);
     const hi = toMinutes(not_after);
     if (hi <= lo) return fail('not_after must be later than not_before.');
-    const todays = events.filter((e) => e.date === date);
+    const todays = await repo.listEvents({ date });
     const busy = todays
       .map((e) => [toMinutes(e.start) - buffer_minutes, toMinutes(e.end) + buffer_minutes])
       .sort((a, b) => a[0] - b[0]);
@@ -85,7 +88,7 @@ server.registerTool(
     annotations: READ,
   },
   async ({ id }) => {
-    const event = events.find((e) => e.id === id);
+    const event = await repo.getEvent(id);
     return event ? ok({ event }) : fail(`No event with id ${id}.`);
   },
 );
@@ -94,7 +97,7 @@ server.registerTool(
   'create_event',
   {
     title: 'Create event',
-    description: 'Add an event to the calendar. This changes the user\'s calendar.',
+    description: "Add an event to the calendar. This changes the user's calendar.",
     inputSchema: {
       title: z.string().min(2),
       date: z.string().regex(DATE_RE).describe('YYYY-MM-DD'),
@@ -107,14 +110,28 @@ server.registerTool(
   },
   async ({ title, date, start, end, location = '', notes = '' }) => {
     if (toMinutes(end) <= toMinutes(start)) return fail('end must be later than start.');
-    const conflicts = events
-      .filter((e) => e.date === date && toMinutes(e.start) < toMinutes(end) && toMinutes(start) < toMinutes(e.end))
+    const existing = await repo.listEvents({ date });
+    const conflicts = existing
+      .filter((e) => toMinutes(e.start) < toMinutes(end) && toMinutes(start) < toMinutes(e.end))
       .map((e) => ({ id: e.id, title: e.title, start: e.start, end: e.end }));
-    created += 1;
-    const event = { id: `evt_new_${created}`, kind: 'event', title, date, start, end, location, attendees: [], notes, created_by: 'Weave (approved by you)' };
-    events.push(event);
+    const event = await repo.createEvent({
+      title,
+      date,
+      start,
+      end,
+      location,
+      notes,
+      source: 'user event',
+      createdBy: 'Weave (approved by you)',
+    });
     return ok({ event, conflicts });
   },
 );
 
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, async () => {
+    await closeDatabase();
+    process.exit(0);
+  });
+}
 await serve(server);
