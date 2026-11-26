@@ -1,8 +1,12 @@
 import React, { useRef } from 'react';
 import { Icon } from '../Icons';
-import { ICON, YARN, clock, describeRecord, fmtArgs, plural } from '../../lib/formatters';
+import { APP_REGISTRY, ICON, YARN, clock, describeRecord, fmtArgs, plural } from '../../lib/formatters';
 
 const TABS = ['apps', 'sources', 'activity'];
+
+// The backend remains the source of truth for status, enabled state and tools.
+// This registry guarantees that every supported MCP app has a presentation slot
+// even while an older backend is starting or has not returned a status entry yet.
 
 export function InspectorPanel({
   tab,
@@ -24,6 +28,10 @@ export function InspectorPanel({
   const citedSources = answer ? answer.sources.filter((s) => s.n) : [];
   const uncitedSources = answer ? answer.sources.filter((s) => !s.n) : [];
   const activityItems = [...activity].reverse();
+  const registeredApps = APP_REGISTRY.map((definition) => {
+    const connected = status?.apps?.find((app) => app.id === definition.id);
+    return connected ?? { ...definition, status: 'missing', enabled: false, error: 'No MCP status received.', tools: [] };
+  });
 
   const select = (name, focus = false) => {
     onSelectTab(name);
@@ -115,7 +123,7 @@ export function InspectorPanel({
             <h2>Connected through MCP</h2>
             <p className="panel-note">Switch an app off and Weave stops reading it. Tools that change data always ask first.</p>
             <ul className="apps">
-              {status.apps.map((a) => {
+              {registeredApps.map((a) => {
                 const yarn = YARN[a.id] ?? a.id;
                 const on = a.enabled && a.status === 'connected';
                 const broken = a.status !== 'connected';

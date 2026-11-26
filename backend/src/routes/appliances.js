@@ -128,6 +128,12 @@ export function createAppliancesRouter({ hub }) {
     if (data) res.json(data);
   });
 
+  router.delete('/documents/:id', async (req, res) => {
+    if (guard(res)) return;
+    const data = await call(res, 'delete_appliance_document', { id: req.params.id }, 'deleted an appliance document and linked records');
+    if (data) res.json(data);
+  });
+
   router.get('/deadlines/upcoming', async (req, res) => {
     if (guard(res)) return;
     const { withinDays, type } = req.query;

@@ -10,6 +10,7 @@ import { ApplianceDeadlineRepository } from '../repositories/appliance-deadline-
 import { ApplianceReminderRepository } from '../repositories/appliance-reminder-repository.js';
 import { ApplianceService } from '../services/appliance-service.js';
 import { DEADLINE_TYPES, parseWindows, parseDate } from '../lib/appliance-fields.js';
+import { deleteUpload } from '../lib/appliance-uploads.js';
 
 await connectDatabase();
 const service = new ApplianceService({
@@ -63,6 +64,7 @@ server.registerTool('get_upcoming_deadlines', { title: 'Get upcoming appliance d
 server.registerTool('list_appliance_reminders', { title: 'List appliance reminders', description: 'List appliance reminders, optionally filtered by appliance or lifecycle status.', inputSchema: { applianceId: z.string().optional(), status: z.enum(['suggested', 'approved', 'dismissed', 'completed', 'cancelled', 'all']).optional() }, annotations: READ }, async ({ applianceId, status }) => safe(async () => ({ reminders: await service.reminders.list({ applianceId, status }) })));
 
 server.registerTool('confirm_appliance_document', { title: 'Confirm appliance document', description: 'Save a user-reviewed document: link it to an appliance and activate only the deadlines the user confirmed. Approval required.', inputSchema: { documentId: z.string().min(1), applianceId: z.string().optional(), fields: z.record(z.any()).optional(), deadlines: z.array(z.object({ index: z.number().int().nonnegative(), confirmed: z.literal(true), date: z.string().nullable().optional(), amount: z.union([z.string(), z.number()]).optional() })).optional() }, annotations: WRITE }, async ({ documentId, applianceId, fields, deadlines }) => safe(async () => service.confirmDocument({ documentId, applianceId, fields, deadlines, today: date() })));
+server.registerTool('delete_appliance_document', { title: 'Delete appliance document', description: 'Delete a private appliance document and its linked deadlines/reminders. Approval required.', inputSchema: { id: z.string().min(1) }, annotations: WRITE }, async ({ id }) => safe(async () => { const deleted = await service.deleteDocument(id); await deleteUpload(deleted.storedName); return { documentId: deleted.id, deleted: true }; }));
 server.registerTool('save_appliance', { title: 'Save appliance', description: 'Create or find an appliance from documented identity fields. Approval required.', inputSchema: fields, annotations: WRITE }, async (input) => safe(async () => {
   const appliance = await service.appliances.findOrCreate(input);
   if (!appliance) throw new Error('Provide at least a serial number, or a brand/model/name, to save an appliance.');

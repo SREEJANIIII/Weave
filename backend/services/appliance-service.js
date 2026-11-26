@@ -3,6 +3,10 @@
 import { FIELD_DEFS, confirmedFieldValues, dedupeKey, parseAmount, parseDate } from '../lib/appliance-fields.js';
 import { isoDate } from '../lib/dates.js';
 import { expandRecurrence } from '../repositories/appliance-deadline-repository.js';
+import { Appliance } from '../models/appliance.js';
+import { ApplianceDocument } from '../models/appliance-document.js';
+import { ApplianceDeadline } from '../models/appliance-deadline.js';
+import { ApplianceReminder } from '../models/appliance-reminder.js';
 
 export class ApplianceService {
   constructor({ appliances, documents, deadlines, reminders, windows = [30, 14, 7], monthsAhead = 6 }) {
@@ -44,6 +48,26 @@ export class ApplianceService {
     if (!doc) throw new Error(`No appliance document with id ${documentId}.`);
     if (doc.status !== 'pending_review') throw new Error(`This document is already ${doc.status}.`);
 
+    if (!fields || typeof fields !== 'object' || Array.isArray(fields)) throw new Error('fields must be an object.');
+    for (const key of Object.keys(fields)) if (!FIELD_DEFS[key]) throw new Error(`Unknown appliance field: ${key}.`);
+    if (!Array.isArray(deadlines)) throw new Error('deadlines must be an array.');
+    const seenIndexes = new Set();
+    for (const input of deadlines) {
+      if (!input || input.confirmed !== true || !Number.isInteger(input.index) || input.index < 0 || input.index >= (doc.extraction?.deadlines?.length ?? 0)) throw new Error(`Unknown deadline at index ${input?.index}.`);
+      if (seenIndexes.has(input.index)) throw new Error(`Deadline at index ${input.index} was submitted more than once.`);
+      seenIndexes.add(input.index);
+      const source = doc.extraction.deadlines[input.index];
+      const date = input.date !== undefined && input.date !== null ? parseDate(input.date) : source.date;
+      if (!date) throw new Error(`${source.title} needs a valid, documented date before it can be confirmed.`);
+      if (input.amount !== undefined && (parseAmount(input.amount) === null || parseAmount(input.amount).value < 0)) throw new Error(`${source.title} has an invalid amount.`);
+      const recurrence = input.recurrence === undefined ? source.recurrence : input.recurrence;
+      if (recurrence !== null && recurrence !== undefined) {
+        if (!['monthly', 'yearly'].includes(recurrence.frequency)) throw new Error(`${source.title} has an invalid recurrence frequency.`);
+        if (recurrence.frequency === 'monthly' && (!Number.isInteger(recurrence.dayOfMonth) || recurrence.dayOfMonth < 1 || recurrence.dayOfMonth > 31)) throw new Error(`${source.title} has an invalid recurrence day.`);
+        if (recurrence.endDate && !parseDate(recurrence.endDate)) throw new Error(`${source.title} has an invalid recurrence end date.`);
+      }
+    }
+
     const merged = { ...(doc.extraction?.fields ?? {}) };
     const checkedFields = {};
     for (const [key, def] of Object.entries(FIELD_DEFS)) {
@@ -64,6 +88,10 @@ export class ApplianceService {
     }
 
     const confirmed = confirmedFieldValues(merged);
+    const beforeDocument = await ApplianceDocument.findById(doc.id).lean();
+    const beforeAppliance = applianceId ? await Appliance.findById(applianceId).lean() : null;
+    const beforeDeadlines = await ApplianceDeadline.find({ sourceDocumentId: doc.id }).lean();
+    const beforeReminders = applianceId ? await ApplianceReminder.find({ applianceId }).lean() : [];
     let appliance = applianceId ? await this.appliances.get(applianceId) : null;
     if (applianceId && !appliance) throw new Error(`No appliance with id ${applianceId}.`);
     if (!appliance) {
@@ -73,7 +101,8 @@ export class ApplianceService {
       appliance = await this.appliances.update(appliance.id, { ...confirmed, confirmedFields: Object.keys(confirmed) }, { sourceDocumentId: doc.id });
     }
 
-    const saved = await this.documents.confirm(doc.id, { applianceId: appliance.id, confirmedFields: merged, confirmedAt: new Date().toISOString() });
+    try {
+      const saved = await this.documents.confirm(doc.id, { applianceId: appliance.id, confirmedFields: merged, confirmedAt: new Date().toISOString() });
     const occurrences = [];
     for (const input of Array.isArray(deadlines) ? deadlines : []) {
       if (input.confirmed !== true) continue;
@@ -105,13 +134,55 @@ export class ApplianceService {
     }
     await this.deadlines.cancelMissing(appliance.id, occurrences.map((x) => x.occurrenceKey), doc.id);
     const reminders = await this.reconcile(appliance.id, { today });
-    return { appliance, document: saved, deadlines: occurrences, reminders };
+      return { appliance, document: saved, deadlines: occurrences, reminders };
+    } catch (error) {
+      // MongoDB standalone deployments do not support transactions. Restore every
+      // touched collection so a failed confirmation cannot leave an orphan.
+      await Promise.all([
+        beforeDocument ? ApplianceDocument.replaceOne({ _id: beforeDocument._id }, beforeDocument, { upsert: true }) : ApplianceDocument.deleteOne({ _id: doc.id }),
+        beforeAppliance ? Appliance.replaceOne({ _id: beforeAppliance._id }, beforeAppliance, { upsert: true }) : (appliance?.id ? Appliance.deleteOne({ _id: appliance.id }) : Promise.resolve()),
+        ApplianceDeadline.deleteMany({ sourceDocumentId: doc.id }).then(() => beforeDeadlines.length ? ApplianceDeadline.insertMany(beforeDeadlines, { ordered: true }) : null),
+        appliance?.id ? ApplianceReminder.deleteMany({ applianceId: appliance.id }).then(() => beforeReminders.length ? ApplianceReminder.insertMany(beforeReminders, { ordered: true }) : null) : null,
+      ]);
+      throw error;
+    }
   }
 
   async updateAppliance(id, changes) {
     const appliance = await this.appliances.update(id, changes);
     if (!appliance) throw new Error(`No appliance with id ${id}.`);
     return appliance;
+  }
+
+  async deleteDocument(id) {
+    const doc = await ApplianceDocument.findById(String(id)).lean();
+    if (!doc) throw new Error(`No appliance document with id ${id}.`);
+    const linked = doc.applianceId ? await Appliance.findById(doc.applianceId).lean() : null;
+    const linkedDeadlines = await ApplianceDeadline.find({ sourceDocumentId: doc._id }).lean();
+    const linkedReminders = await ApplianceReminder.find({ sourceDocumentId: doc._id }).lean();
+    try {
+      await Promise.all([
+        ApplianceDeadline.deleteMany({ sourceDocumentId: doc._id }),
+        ApplianceReminder.deleteMany({ sourceDocumentId: doc._id }),
+      ]);
+      await ApplianceDocument.deleteOne({ _id: doc._id });
+      if (linked) {
+        const remaining = await ApplianceDocument.countDocuments({ applianceId: linked._id });
+        if (remaining === 0) await Appliance.deleteOne({ _id: linked._id });
+        else await Appliance.updateOne({ _id: linked._id }, { $pull: { sourceDocumentIds: doc._id } });
+      }
+      return { id: doc._id, storedName: doc.storedName, applianceId: doc.applianceId };
+    } catch (error) {
+      // Compensating rollback keeps a standalone local MongoDB safe when a
+      // multi-document transaction is unavailable.
+      await Promise.all([
+        ApplianceDocument.replaceOne({ _id: doc._id }, doc, { upsert: true }),
+        linked ? Appliance.replaceOne({ _id: linked._id }, linked, { upsert: true }) : null,
+        linkedDeadlines.length ? ApplianceDeadline.insertMany(linkedDeadlines, { ordered: true }) : null,
+        linkedReminders.length ? ApplianceReminder.insertMany(linkedReminders, { ordered: true }) : null,
+      ]);
+      throw error;
+    }
   }
 
   async updateDeadline(id, changes, { today = isoDate(new Date()) } = {}) {

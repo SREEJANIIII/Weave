@@ -13,8 +13,33 @@ import { ApplianceDocumentRepository } from '../repositories/appliance-document-
 import { ApplianceDeadlineRepository } from '../repositories/appliance-deadline-repository.js';
 import { ApplianceReminderRepository } from '../repositories/appliance-reminder-repository.js';
 import { ApplianceService } from '../services/appliance-service.js';
+import { sniffFile } from '../lib/document-pipeline.js';
+import { profileCipher, encryptProfile, decryptProfile } from '../db/database.js';
 
 process.env.NVIDIA_API_KEY ||= 'test-only-key';
+process.env.WEAVE_PROFILE_ENCRYPTION_KEY ||= Buffer.alloc(32, 9).toString('base64');
+
+// Uploads are identified by magic bytes, never by extension or declared MIME.
+assert.equal(sniffFile(Buffer.from('%PDF-1.7'), 'image/png', 'fake.png').mimeType, 'application/pdf');
+assert.equal(sniffFile(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), 'application/pdf', 'fake.pdf').mimeType, 'image/png');
+assert.equal(sniffFile(Buffer.from([0xff, 0xd8, 0xff, 0xe0]), 'application/octet-stream', 'fake.bin').mimeType, 'image/jpeg');
+assert.throws(() => sniffFile(Buffer.from('not a PDF'), 'application/pdf', 'file.pdf'), /Unsupported file type/);
+console.log('  ✓ upload signatures reject extension/MIME spoofing');
+
+// Profile encryption must be configured and must never downgrade to plaintext.
+const savedKey = process.env.WEAVE_PROFILE_ENCRYPTION_KEY;
+assert.equal(profileCipher().length, 32);
+const encrypted = encryptProfile({ bust: 88 });
+assert.equal(encrypted.encrypted, true);
+assert.deepEqual(decryptProfile(encrypted.payload, true), { bust: 88 });
+process.env.WEAVE_PROFILE_ENCRYPTION_KEY = Buffer.alloc(32, 8).toString('base64');
+assert.throws(() => decryptProfile(encrypted.payload, true), /Unsupported state|auth tag|unable to authenticate/i);
+process.env.WEAVE_PROFILE_ENCRYPTION_KEY = '';
+assert.throws(() => profileCipher(), /required/);
+process.env.WEAVE_PROFILE_ENCRYPTION_KEY = 'not-base64';
+assert.throws(() => profileCipher(), /canonical base64/);
+process.env.WEAVE_PROFILE_ENCRYPTION_KEY = savedKey;
+console.log('  ✓ profile encryption rejects missing and malformed keys');
 
 // 1. Extraction never invents values, and separates missing / unclear / conflicting.
 const extracted = normaliseExtraction({
@@ -108,6 +133,12 @@ const source = await documents.create({
     ],
   },
 });
+await assert.rejects(
+  () => service.confirmDocument({ documentId: source.id, fields: { name: 'LG Washing Machine' }, deadlines: [{ index: 99, confirmed: true, date: '2027-01-01' }] }),
+  /Unknown deadline/,
+);
+assert.equal(await Appliance.countDocuments({}), 0, 'invalid deadline indices are rejected before persistence');
+assert.equal((await ApplianceDocument.findById(source.id)).status, 'pending_review');
 const result = await service.confirmDocument({
   documentId: source.id,
   fields: { name: 'LG Washing Machine', brand: 'LG', serialNumber: 'ABC12345', purchaseDate: '2024-03-12' },
@@ -134,6 +165,16 @@ const secondResult = await service.confirmDocument({ documentId: second.id, fiel
 assert.equal(secondResult.appliance.id, result.appliance.id, 'a second document does not create a duplicate appliance');
 assert.equal((await appliances.list()).length, 1);
 assert.equal((await documents.list({ applianceId: result.appliance.id })).length, 2);
+await service.deleteDocument(second.id);
+assert.equal(await documents.get(second.id), null, 'document deletion removes the linked document');
+assert.equal((await appliances.list()).length, 1, 'shared appliance remains while another document is linked');
+const failed = await documents.create({ kind: 'bill', originalName: 'failed.png', mimeType: 'image/png', size: 10, storedName: 'failed.png', extraction: { method: 'ocr', warnings: [], fields: { name: { value: 'Toaster', status: 'found', evidence: 'Toaster' } }, deadlines: [] } });
+const originalConfirm = documents.confirm;
+documents.confirm = async () => { throw new Error('simulated persistence failure'); };
+await assert.rejects(() => service.confirmDocument({ documentId: failed.id, fields: { name: 'Toaster' } }), /simulated persistence failure/);
+documents.confirm = originalConfirm;
+assert.equal(await Appliance.findOne({ name: 'Toaster' }), null, 'failed confirmation rolls back a newly created appliance');
+assert.equal((await ApplianceDocument.findById(failed.id)).status, 'pending_review', 'failed confirmation leaves document reviewable');
 const unconfirmed = await deadlines.upsert({ applianceId: result.appliance.id, type: 'service', title: 'Service', dueDate: '2027-01-01', confirmed: false, occurrenceKey: 'appl_test:service:unconfirmed' });
 await assert.rejects(() => service.createReminder(unconfirmed.id, 7), /confirmed deadline/);
 const upcoming = await service.upcoming({ withinDays: 365 });

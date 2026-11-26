@@ -69,7 +69,7 @@ function Welcome({ services, onConnectAll, onChoose, onLater }) {
   );
 }
 
-export function WorkspacePage() {
+export function WorkspacePage({ routeView = null }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -95,7 +95,7 @@ export function WorkspacePage() {
       'Ask one question across your connected apps, manage your Smart Wishlist & Size Intelligence, and approve changes before anything runs.',
   const [searchParams, setSearchParams] = useSearchParams();
   const PAGES = { '/app/wishlist': 'wishlist', '/app/size-profile': 'size-profile', '/app/appliances': 'appliances', '/app/saved': 'saved', '/app/connections': 'connections' };
-  const view = Object.entries(PAGES).find(([path]) => location.pathname.startsWith(path))?.[1] ?? 'home';
+  const view = routeView ?? (Object.entries(PAGES).find(([path]) => location.pathname.startsWith(path))?.[1] ?? 'home');
 
   usePageMeta({
     page: ['wishlist', 'size-profile', 'appliances'].includes(view) ? 'app' : 'dashboard',
