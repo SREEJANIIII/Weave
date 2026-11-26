@@ -22,7 +22,7 @@ Weave/
 │   ├── public/        Fonts, favicons, manifest, and Netlify SPA redirects
 │   ├── vite.config.js Vite config with /api proxy to the backend
 │   └── package.json
-├── backend/       Node server, planners and the four MCP servers
+├── backend/       Node server, planners and the five MCP servers
 │   ├── src/           HTTP server, MCP client, planners
 │   ├── mcp-servers/   Calendar, Notes, Tasks, Money
 │   ├── lib/           Shared date helpers
@@ -65,7 +65,7 @@ Run `npm run dev` from the repo root for instant React HMR while talking to the 
 
 ### Planners
 
-- **Offline planner** (default when no key is found): a fixed script for the two demo questions. It makes the same real MCP calls and follows the same rules, but the reasoning is hand-written, so it only understands those two questions. Use it if the venue Wi-Fi is unreliable.
+- **Offline planner** (default when no key is found): a fixed script for the demo questions plus deterministic wishlist, occasion, and size-matching demonstrations. It makes the same real MCP calls and follows the same rules.
 - **Claude planner**: set a key, restart, and pick *Claude* in the top bar. Claude chooses which MCP tools to call and writes the cited answer.
 
 Still in `backend/`:
@@ -98,15 +98,17 @@ npm run smoke
 | Part | Status |
 |---|---|
 | MCP protocol: client, `tools/list`, `tools/call`, tool annotations | **Real**, using the official `@modelcontextprotocol/sdk` over stdio |
-| Calendar, Notes, Tasks and Money servers | **Real MCP servers, sample data.** The data is generated relative to today so the demo works on any day. Nothing connects to a real account. |
+| Calendar, Notes, Tasks, Money, and Wishlist & sizes servers | **Real MCP servers, sample data.** The data is generated relative to today so the demo works on any day. Nothing connects to a real account or shopping platform. |
 | Money | Reads `backend/data/statement.csv` if you add one (format in `backend/data/statement.example.csv`); otherwise a sample statement. Never connects to a bank or UPI app. |
 | Approval gate | **Real.** Any tool not marked `readOnlyHint: true` is held as a draft; it runs only after you approve, then Weave reads the record back before saying "Done". |
+| Wishlist and size intelligence | **Implemented with synthetic sample data.** Wishlist CRUD, occasion tags, a clearly labelled sample size profile, deterministic brand/category charts, unit conversion, missing-measurement and between-size handling are available through the Wishlist & sizes MCP server. |
+| Occasion-aware reminders | **Implemented as a read-and-suggest workflow.** Upcoming records from Calendar are matched to wishlist occasion tags in configurable 30/14/7-day windows. Creating a Task or Calendar reminder remains approval-gated. Festival dates are not hardcoded. |
 | Claude planner | Built on the Anthropic SDK's tool runner with `claude-opus-5-5`. **Not tested against the live API on this machine** (no key was available). The offline path is fully tested. |
 | Email, fitness apps, travel, learning, home | **Planned.** Shown as planned in the app and not connected. |
 
 ## Demo script (about 2 minutes)
 
-1. Point at the left rail: four MCP servers, the tools each one exposes, and which ones *ask first*.
+1. Point at the left rail: five MCP servers, the tools each one exposes, and which ones *ask first*.
 2. Ask *"What should I follow up on today, and when can I fit in a workout?"* and watch the MCP calls stream in.
 3. Hover a citation number: the matching record lights up on the right.
 4. Open **Edit** on the run, move it to 6:30, then **Approve**. The card says it was added and read back from the calendar. Open **MCP activity** to show the held write, the approval and the read-back.
@@ -119,13 +121,23 @@ npm run smoke
 
 | Path | What it does |
 |---|---|
-| `backend/mcp-servers/*.js` | Four MCP servers (`McpServer` + stdio). Tools carry MCP annotations: reads are `readOnlyHint: true`; `create_task` and `create_event` are not. |
+| `backend/mcp-servers/*.js` | Five MCP servers (`McpServer` + stdio). Tools carry MCP annotations: reads are `readOnlyHint: true`; wishlist/profile mutations, `create_task`, and `create_event` are not. |
 | `backend/src/hub.js` | Weave's MCP client. Spawns each server, discovers tools, calls them, and logs every message for the activity panel. |
 | `backend/src/run.js` | One question = one run. Reads register citable sources, writes become drafts, and the answer may only cite records that were actually read. |
 | `backend/src/agent-claude.js` | Claude planner: each MCP tool becomes a tool for the SDK's tool runner; write tools only create drafts. The final answer comes back through a strict `present_answer` tool. |
-| `backend/src/agent-offline.js` | Offline planner for the two demo questions. |
+| `backend/src/agent-offline.js` | Offline planner for the core demo questions plus deterministic wishlist/occasion/size workflows. |
 | `backend/src/server.js` | Local HTTP server (127.0.0.1 only): serves `frontend/dist` (with SPA fallback), a streaming `/api/ask`, approve/dismiss, app switches, reset. |
 | `frontend/` | React + Vite interface: everyday landing page (`/`), developer mode (`/developers`), and prototype app (`/app`). |
+
+### Wishlist, sizes, and occasions
+
+The `wishlist` MCP server exposes `list_wishlist_items`, `search_wishlist`, `get_wishlist_item`, `save_wishlist_item`, `update_wishlist_item`, `delete_wishlist_item`, `get_size_profile`, `update_size_profile`, `get_brand_size_chart`, and `match_product_size`. Writes are held for approval by the existing Run/Hub gate. Measurements are sensitive: profile reads are only used for size work, and measurement arguments are redacted from the activity feed.
+
+The size engine in `backend/lib/size-matcher.js` is deterministic. It compares a profile against brand/category/region-specific synthetic charts and reports confidence, missing measurements, out-of-range measurements, and a disclaimer that the recommendation is not a fit guarantee. No real brand size-chart API is connected.
+
+The offline planner can answer questions such as “What have I saved for Diwali?”, “Show my wishlist for upcoming occasions”, and “Which size should I consider for this saved dress?”. It reads calendar records relative to today and matches their occasion tags; it does not calculate or assume festival dates.
+
+The sample data is in-memory and resets when the server restarts or the demo is reset. Real shopping, calendar, and task integrations, encrypted-at-rest profile storage, and user deletion controls remain planned.
 
 ### Configuration
 

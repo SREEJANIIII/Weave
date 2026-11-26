@@ -25,6 +25,8 @@ export function calendarEvents() {
     event('evt_dentist', 'Dentist', day(1), '17:30', '18:15', { location: 'Smile Dental' }),
     event('evt_usability', 'Usability sessions', day(2), '14:00', '17:00', { location: 'Research room', attendees: ['Rohan'] }),
     event('evt_venue', 'Offsite venue walkthrough', day(3), '10:00', '11:00', { location: 'Lakeview Hall' }),
+    event('evt_diwali', 'Diwali celebration', day(10), '19:00', '22:00', { location: 'Community Hall', occasion: 'Diwali' }),
+    event('evt_wedding', "Aarav's wedding", day(25), '18:00', '23:00', { location: 'The Garden Pavilion', occasion: 'Wedding' }),
     // Last week (context for spending questions)
     event('evt_lw_review', 'Sprint review', lw(0), '16:00', '17:00', { location: 'Studio A' }),
     event('evt_lw_gym', 'Strength session', lw(1), '07:00', '07:45'),
@@ -32,6 +34,26 @@ export function calendarEvents() {
     event('evt_lw_release', 'Release night: v1.8', lw(4), '18:00', '22:00', { location: 'Office' }),
     event('evt_lw_movie', 'Movie night with friends', lw(5), '19:00', '22:30', { location: 'Cinema' }),
     event('evt_lw_grocery', 'Grocery run', lw(6), '11:00', '12:00'),
+  ];
+}
+
+export function wishlistItems() {
+  return [
+    { id: 'wish_101', kind: 'wishlist_item', product_name: 'Blue silk saree', brand: 'Saanvi Studio', product_url: 'https://example.test/products/blue-silk-saree', image_url: 'https://example.test/images/blue-saree.jpg', category: 'saree', occasion: 'Diwali', notes: 'Pair with gold earrings.', product_id: 'saanvi-blue-saree', status: 'saved', source: 'sample data' },
+    { id: 'wish_102', kind: 'wishlist_item', product_name: 'Black wrap dress', brand: 'Northline', product_url: 'https://example.test/products/black-wrap-dress', image_url: 'https://example.test/images/black-dress.jpg', category: 'dress', occasion: 'Birthday', notes: 'Check sleeve length.', product_id: 'northline-black-wrap', status: 'saved', source: 'sample data' },
+    { id: 'wish_103', kind: 'wishlist_item', product_name: 'Block heel sandals', brand: 'Mira Footwear', product_url: 'https://example.test/products/block-heels', image_url: 'https://example.test/images/block-heels.jpg', category: 'footwear', occasion: 'Wedding', notes: 'Comfortable for long events.', product_id: 'mira-block-heels', status: 'saved', source: 'sample data' },
+  ];
+}
+
+export function sizeProfile() {
+  return { id: 'profile_sample_1', kind: 'size_profile', unit: 'cm', measurements: { bust: 88, waist: 70, hips: 96, shoulder: 38, inseam: 76 }, preferred_fit: 'regular', preferred_categories: ['dress', 'tops'], source: 'clearly labelled synthetic sample profile' };
+}
+
+export function sizeCharts() {
+  const row = (size, bust, waist, hips) => ({ size, measurements: { bust, waist, hips } });
+  return [
+    { brand: 'Northline', category: 'dress', region: 'IN', unit: 'cm', synthetic: true, requiredMeasurements: ['bust', 'waist', 'hips'], sizes: [row('S', [80, 86], [62, 68], [86, 92]), row('M', [86, 92], [68, 74], [92, 98]), row('L', [92, 98], [74, 80], [98, 104])] },
+    { brand: 'Saanvi Studio', category: 'saree', region: 'IN', unit: 'cm', synthetic: true, requiredMeasurements: ['bust', 'waist', 'hips'], sizes: [row('S', [82, 88], [64, 70], [88, 94]), row('M', [88, 94], [70, 76], [94, 100]), row('L', [94, 100], [76, 82], [100, 106])] },
   ];
 }
 

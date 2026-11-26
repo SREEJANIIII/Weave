@@ -41,10 +41,10 @@ const ok = (label) => console.log(`  ✓ ${label}`);
 
 try {
   const status = await waitForServer();
-  assert.equal(status.apps.filter((a) => a.status === 'connected').length, 4, 'four MCP apps connected');
-  assert.equal(status.apps.flatMap((a) => a.tools).length, 12, 'twelve tools discovered');
-  assert.deepEqual(status.apps.flatMap((a) => a.tools.filter((t) => !t.readOnly).map((t) => t.name)).sort(), ['create_event', 'create_task']);
-  ok('4 MCP servers connected, 12 tools, 2 marked as changing data');
+  assert.equal(status.apps.filter((a) => a.status === 'connected').length, 5, 'five MCP apps connected');
+  assert.equal(status.apps.flatMap((a) => a.tools).length, 22, 'twenty-two tools discovered');
+  assert.deepEqual(status.apps.flatMap((a) => a.tools.filter((t) => !t.readOnly).map((t) => t.name)).sort(), ['create_event', 'create_task', 'delete_wishlist_item', 'save_wishlist_item', 'update_size_profile', 'update_wishlist_item']);
+  ok('5 MCP servers connected, 22 tools, 6 marked as changing data');
 
   // Question 1
   const q1 = await ask(status.suggestions[0]);
@@ -107,7 +107,7 @@ try {
 
   // Reset, then dismiss a draft
   const reset = await post('/api/reset');
-  assert.equal(reset.apps.filter((a) => a.status === 'connected').length, 4);
+  assert.equal(reset.apps.filter((a) => a.status === 'connected').length, 5);
   const q5 = await ask(status.suggestions[0]);
   assert.equal(q5.answer.proposals.length, 2, 'sample data back to the start');
   ok('reset restores the sample data');
@@ -116,6 +116,15 @@ try {
   const late = await post(`/api/proposals/${q5.answer.proposals[0].id}/approve`);
   assert.ok(late.error, 'a dismissed draft cannot be approved');
   ok('dismissing a draft works, and it cannot be approved afterwards');
+
+  const wishlist = await ask('Show me my outfits saved for Diwali and suggest the size based on my measurements');
+  assert.ok(!wishlist.error, wishlist.error?.message);
+  assert.match(wishlist.answer.headline, /saved product|found/i);
+  assert.ok(wishlist.answer.sections.some((s) => /size/i.test(s.title)), 'size recommendation section');
+  assert.ok(wishlist.answer.sections.flatMap((s) => s.items).every((it) => it.sourceIds.length > 0), 'wishlist points cite records');
+  const activity = (await fetch(`${base}/api/activity`).then((r) => r.json())).activity;
+  assert.ok(activity.filter((x) => x.server === 'wishlist' && x.tool === 'match_product_size').every((x) => x.args?.redacted === true), 'size activity arguments are redacted');
+  ok('wishlist occasion matching and deterministic size recommendation cite records without logging measurements');
 
   const unknown = await ask('What is the weather?');
   assert.match(unknown.answer.headline, /Offline mode/);

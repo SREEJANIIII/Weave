@@ -50,6 +50,8 @@ function parsePlan(body) {
 
 export async function runOffline(run) {
   const q = run.question.toLowerCase();
+  const wishlist = /wishlist|saved|diwali|wedding|birthday|occasion|size|outfit|product/.test(q);
+  if (wishlist) return run.finish(await wishlistAndOccasions(run));
   const daily = /follow[\s-]?up|to-?dos?|action items?|workout|exercise|\brun\b|gym|fit in/.test(q);
   const money = /\bspen[dt]|spending|food|expens|money/.test(q);
   if (money && !daily) return run.finish(await spending(run));
@@ -59,6 +61,45 @@ export async function runOffline(run) {
     sections: [{ title: 'Try one of these', items: DEMO_QUESTIONS.map((text) => ({ text, detail: '', source_ids: [] })) }],
     caveats: ['Switch the planner to Claude (top right) to ask anything across your connected apps.'],
   });
+}
+
+async function wishlistAndOccasions(run) {
+  const has = (id) => run.hub.isAvailable(id);
+  if (!has('wishlist')) return { headline: "Wishlist is switched off, so I can't check saved products or sizes.", sections: [], caveats: ['Switch Wishlist & sizes back on in the left panel.'] };
+  const list = await run.read('wishlist', 'list_wishlist_items', {});
+  if (!list.ok) return { headline: "I couldn't read your wishlist.", sections: [], caveats: [list.error] };
+  let saved = list.raw?.items ?? [];
+  const q = run.question.toLowerCase();
+  const occasion = ['diwali', 'wedding', 'birthday'].find((x) => q.includes(x));
+  if (occasion) saved = saved.filter((x) => x.occasion.toLowerCase() === occasion);
+  const sections = [];
+  const items = [];
+  let events = [];
+  if (has('calendar')) {
+    const today = isoDate(now());
+    const window = q.match(/(30|14|7)\s*days?/i)?.[1] ?? '30';
+    const end = isoDate(addDays(now(), Number(window)));
+    const result = await run.read('calendar', 'list_events', { start_date: today, end_date: end });
+    events = (result.raw?.events ?? []).filter((e) => e.occasion || /diwali|wedding|birthday/i.test(e.title));
+    for (const event of events) {
+      const matches = saved.filter((x) => x.occasion && (event.occasion ?? event.title).toLowerCase().includes(x.occasion.toLowerCase()) || x.occasion && event.title.toLowerCase().includes(x.occasion.toLowerCase()));
+      for (const item of matches) items.push({ text: `${item.product_name} (${item.brand}) is saved for ${item.occasion}.`, detail: `Relevant calendar event: “${event.title}” on ${event.date}.`, source_ids: [`wishlist:${item.id}`, `calendar:${event.id}`] });
+    }
+  }
+  if (!items.length && saved.length) for (const item of saved) items.push({ text: `${item.product_name} (${item.brand}) — saved for ${item.occasion || 'no occasion tag'}.`, detail: item.notes || '', source_ids: [`wishlist:${item.id}`] });
+  if (items.length) sections.push({ title: events.length ? 'Saved for upcoming occasions' : 'Saved products', items: items.slice(0, 12) });
+
+  if (/size|fit|measurements?/.test(q)) {
+    const target = saved[0];
+    if (target) {
+      const match = await run.read('wishlist', 'match_product_size', { item_id: target.id });
+      const result = match.raw?.match;
+      if (result?.status === 'matched') sections.push({ title: 'Measurement-based size recommendation', items: [{ text: `${target.product_name}: consider ${result.recommendation}.`, detail: `${result.explanation} Confidence: ${result.confidence}. ${result.disclaimer}`, source_ids: [`wishlist:${target.id}`, ...Object.keys(match.raw ?? {}).filter((k) => k === 'match').map(() => `wishlist:${target.id}`)] }] });
+      else sections.push({ title: 'Size recommendation', items: [{ text: 'A size recommendation is unavailable for this saved product.', detail: result?.reason ?? 'No matching chart was found.', source_ids: [`wishlist:${target.id}`] }] });
+    }
+  }
+  const headline = items.length ? `I found ${items.length} saved product${items.length === 1 ? '' : 's'} relevant to your question.` : occasion ? `I couldn't find saved products for ${occasion}.` : 'Your wishlist is empty.';
+  return { headline, sections, caveats: ['Wishlist and size charts are sample data; product platforms are not connected.', ...(events.length ? [] : ['No matching upcoming calendar event was found in the requested window.'])] };
 }
 
 async function followUpsAndWorkout(run) {

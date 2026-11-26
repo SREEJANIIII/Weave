@@ -9,6 +9,7 @@ export const SERVER_DEFS = [
   { id: 'notes', name: 'Notes', script: 'mcp-servers/notes.js', blurb: 'Meeting notes and plans' },
   { id: 'tasks', name: 'Tasks', script: 'mcp-servers/tasks.js', blurb: 'To-dos and due dates' },
   { id: 'money', name: 'Money', script: 'mcp-servers/money.js', blurb: 'Imported statement' },
+  { id: 'wishlist', name: 'Wishlist & sizes', script: 'mcp-servers/wishlist.js', blurb: 'Saved products and size intelligence' },
 ];
 
 // Shown in the UI as planned. Nothing here is connected.
@@ -68,7 +69,14 @@ export class Hub {
   }
 
   log(item) {
-    const entry = { seq: ++this.seq, at: new Date().toISOString(), ...item, ms: Math.round(item.ms ?? 0) };
+    const safe = { ...item };
+    // Measurements are sensitive personal information. Keep them out of the activity feed.
+    if (safe.server === 'wishlist' && safe.args && ['get_size_profile', 'update_size_profile', 'match_product_size'].includes(safe.tool)) {
+      safe.args = { ...safe.args };
+      for (const key of ['bust', 'waist', 'hips', 'shoulder', 'inseam', 'height', 'measurements']) delete safe.args[key];
+      safe.args.redacted = true;
+    }
+    const entry = { seq: ++this.seq, at: new Date().toISOString(), ...safe, ms: Math.round(item.ms ?? 0) };
     this.activity.push(entry);
     if (this.activity.length > 400) this.activity.shift();
     return entry;
