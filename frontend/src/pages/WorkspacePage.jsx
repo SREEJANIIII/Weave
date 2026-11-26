@@ -11,9 +11,6 @@ import { UploadSheet } from '../components/dashboard/UploadSheet';
 import { Toast } from '../components/dashboard/Toast';
 import { WishlistView } from '../components/wishlist/WishlistView';
 import { SizeProfileView } from '../components/profile/SizeProfileView';
-import { SizeIntelligenceModal } from '../components/wishlist/SizeIntelligenceModal';
-import { ConnectionsView } from '../components/connections/ConnectionsView';
-import { SHORT } from '../lib/formatters';
 import { AppliancesView } from '../components/appliances/AppliancesView';
 import { api } from '../lib/api';
 import { joinNames } from '../lib/services';
@@ -72,31 +69,10 @@ function Welcome({ services, onConnectAll, onChoose, onLater }) {
 export function WorkspacePage({ routeView = null }) {
   const location = useLocation();
   const navigate = useNavigate();
+
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const view = routeView ?? (location.pathname.startsWith('/app/wishlist')
-    ? 'wishlist'
-    : location.pathname.startsWith('/app/size-profile')
-      ? 'size-profile'
-      : location.pathname.startsWith('/app/connections')
-        ? 'connections'
-        : location.pathname.startsWith('/app/appliances')
-          ? 'appliances'
-          : 'home');
-
-  usePageMeta({
-    page: 'app',
-    title:
-      view === 'wishlist'
-        ? 'Weave — Smart Wishlist'
-        : view === 'size-profile'
-          ? 'Weave — My Size Profile'
-          : view === 'connections'
-            ? 'Weave — Apps & Data Sources'
-            : 'Weave prototype: ask across your apps',
-    description:
-      'Ask one question across your connected apps, manage your Smart Wishlist & Size Intelligence, and approve changes before anything runs.',
-  });
+  const PAGES = { '/app/wishlist': 'wishlist', '/app/size-profile': 'size-profile', '/app/appliances': 'appliances', '/app/saved': 'saved', '/app/connections': 'connections' };
+  const view = routeView ?? (Object.entries(PAGES).find(([path]) => location.pathname.startsWith(path))?.[1] ?? 'home');
 
   usePageMeta({
     page: ['wishlist', 'size-profile', 'appliances'].includes(view) ? 'app' : 'dashboard',
@@ -571,61 +547,6 @@ export function WorkspacePage({ routeView = null }) {
       />
       <button type="button" className="side-scrim" aria-label="Close menu" tabIndex={drawer ? 0 : -1} onClick={() => setDrawer(false)} />
 
-      {view === 'connections' ? (
-        <main className="wl-shell" id="main">
-          <ConnectionsView
-            initialApp={searchParams.get('app') || 'calendar'}
-            offline={offline}
-            onNotify={showToast}
-            onDataChanged={async () => {
-              await loadStatus();
-              await refreshAll();
-            }}
-          />
-        </main>
-      ) : view === 'wishlist' ? (
-        <main className="wl-shell" id="main">
-          <WishlistView
-            wishlist={wishlist}
-            sizeProfile={sizeProfile}
-            occasions={occasions}
-            reminderPrefs={reminderPrefs}
-            backendReminders={backendReminders}
-            syncMode={syncMode}
-            calendarEnabled={calendarEnabled}
-            syncing={syncing}
-            serverToday={status?.today}
-            onAdd={(item) => runAction(addItem(item), 'Could not add wishlist item.')}
-            onUpdate={(id, patch) => runAction(updateItem(id, patch), 'Could not update item.')}
-            onRemove={(id) => runAction(removeItem(id), 'Could not remove item.')}
-            onDismissReminder={(eventId, remIds) => runAction(dismissReminder(eventId, remIds), 'Could not dismiss reminder.')}
-            onReconcileReminders={() => runAction(reconcileReminders(), 'Could not sync reminders.')}
-            onInspectSize={handleInspectSize}
-            onGoToProfile={() => navigate('/app/size-profile')}
-          />
-        </main>
-      ) : view === 'size-profile' ? (
-        <main className="wl-shell" id="main">
-          <SizeProfileView
-            sizeProfile={sizeProfile}
-            wishlist={wishlist}
-            occasions={occasions}
-            reminderPrefs={reminderPrefs}
-            backendReminders={backendReminders}
-            syncMode={syncMode}
-            calendarEnabled={calendarEnabled}
-            profileDeleted={profileDeleted}
-            serverToday={status?.today}
-            onSaveProfile={(p) => runAction(saveProfile(p), 'Could not save size profile.')}
-            onClearProfile={() => runAction(clearProfileMeasurements(), 'Could not clear measurements.')}
-            onDeleteProfile={() => runAction(deleteProfile(), 'Could not delete size profile.')}
-            onUpdateReminderPrefs={updateReminderPrefs}
-            onReconcileReminders={() => runAction(reconcileReminders(), 'Could not sync reminders.')}
-            onAddOccasion={addOccasionEvent}
-            onOpenWishlist={() => navigate('/app/wishlist')}
-          />
-        </main>
-      ) : (
       <div className="shell-main">
         <header className="main-top">
           <button type="button" className="side-icon main-toggle" onClick={toggleSidebar} aria-label="Open sidebar">
@@ -746,7 +667,6 @@ export function WorkspacePage({ routeView = null }) {
 
         {dockComposer && <div className="dock">{composer(true)}</div>}
       </div>
-      )}
 
       <UploadSheet
         job={uploadJob}
