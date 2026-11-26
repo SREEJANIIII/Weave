@@ -4,13 +4,15 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
+// The MCP servers Weave connects to. `requires` lists the env vars a server needs (see backend/.env.example);
+// a server whose settings are missing shows as "not set up" instead of stopping Weave.
 export const SERVER_DEFS = [
-  { id: 'calendar', name: 'Calendar', script: 'mcp-servers/calendar.js', blurb: 'Events and free time' },
-  { id: 'notes', name: 'Notes', script: 'mcp-servers/notes.js', blurb: 'Meeting notes and plans' },
-  { id: 'tasks', name: 'Tasks', script: 'mcp-servers/tasks.js', blurb: 'To-dos and due dates' },
-  { id: 'money', name: 'Money', script: 'mcp-servers/money.js', blurb: 'Imported statement' },
-  { id: 'wishlist', name: 'Wishlist & sizes', script: 'mcp-servers/wishlist.js', blurb: 'Saved products and size intelligence' },
-  { id: 'appliances', name: 'Appliances & Bills', script: 'mcp-servers/appliances.js', blurb: 'Bills, warranties and deadlines' },
+  { id: 'calendar', name: 'Calendar', script: 'mcp-servers/calendar.js', blurb: 'Events and free time', requires: ['MONGODB_URI'] },
+  { id: 'notes', name: 'Notes', script: 'mcp-servers/notes.js', blurb: 'Meeting notes and plans', requires: ['MONGODB_URI'] },
+  { id: 'tasks', name: 'Tasks', script: 'mcp-servers/tasks.js', blurb: 'To-dos and due dates', requires: ['MONGODB_URI'] },
+  { id: 'money', name: 'Money', script: 'mcp-servers/money.js', blurb: 'Imported statement', requires: ['MONGODB_URI'] },
+  { id: 'wishlist', name: 'Wishlist & sizes', script: 'mcp-servers/wishlist.js', blurb: 'Saved products and size intelligence', requires: ['MONGODB_URI'] },
+  { id: 'appliances', name: 'Appliances & Bills', script: 'mcp-servers/appliances.js', blurb: 'Bills, warranties and deadlines', requires: ['MONGODB_URI'] },
 ];
 
 // Shown in the UI as planned. Nothing here is connected.
@@ -34,8 +36,9 @@ export class Hub {
 
   async start() {
     await Promise.all(SERVER_DEFS.map((def) => this.#connect(def)));
-    const wishlist = this.servers.get('wishlist');
-    if (wishlist?.status === 'error') throw new Error(`Wishlist & sizes could not start: ${wishlist.error}`);
+    // A server that is set up but fails to start is a real error; one that isn't set up yet is not.
+    const broken = [...this.servers.values()].find((x) => x.status === 'error');
+    if (broken) throw new Error(`${broken.def.name} could not start: ${broken.error}`);
   }
 
   async restart() {
@@ -53,6 +56,11 @@ export class Hub {
   async #connect(def, enabled = true) {
     const entry = { def, client: null, tools: [], status: 'connecting', enabled, error: null, data: 'sample data' };
     this.servers.set(def.id, entry);
+    const missing = (def.requires ?? []).filter((k) => !process.env[k]);
+    if (missing.length) {
+      Object.assign(entry, { status: 'not_set_up', error: `Needs ${missing.join(', ')} in backend/.env` });
+      return;
+    }
     const env = Object.fromEntries(
       ['PATH', 'HOME', 'TZ', 'WEAVE_TODAY', 'WEAVE_STATEMENT_CSV', 'MONGODB_URI', 'MONGODB_DB_NAME', 'WEAVE_PROFILE_ENCRYPTION_KEY', 'APPLIANCE_REMINDER_WINDOWS', 'APPLIANCE_EMI_MONTHS_AHEAD', 'WEAVE_UPLOAD_DIR'].filter((k) => process.env[k]).map((k) => [k, process.env[k]]),
     );

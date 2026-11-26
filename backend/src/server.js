@@ -19,7 +19,8 @@ const state = {
 
 async function main() {
   if (!process.env.MONGODB_URI) {
-    console.log('  Database  not set up (MONGODB_URI is empty); Wishlist & sizes stays off, everything else works.');
+    console.log('  Database  not set up: MONGODB_URI is empty in backend/.env, so services that store data show as "not set up".');
+    console.log('            Set it to your MongoDB (e.g. mongodb://127.0.0.1:27017/weave) and restart to turn them on.');
   } else try {
     await connectDatabase();
     console.log('  Database  MongoDB connected');
