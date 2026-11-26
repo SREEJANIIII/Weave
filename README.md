@@ -22,8 +22,8 @@ Weave/
 │   ├── public/        Fonts, favicons, manifest, and Netlify SPA redirects
 │   ├── vite.config.js Vite config with /api proxy to the backend
 │   └── package.json
-├── backend/       Node server, planners and the five MCP servers
-│   ├── src/           HTTP server, MCP client, planners
+├── backend/       Express server, planners and the five MCP servers
+│   ├── src/           Express app and API router, MCP client, planners
 │   ├── mcp-servers/   Calendar, Notes, Tasks, Money
 │   ├── lib/           Shared date helpers
 │   ├── data/          Optional statement CSV for the Money server
@@ -35,7 +35,7 @@ Weave/
 
 ## Run it
 
-Needs Node 22.5 or later. Wishlist, size profiles, and reminders use MongoDB Atlas through Mongoose. The UI in `frontend/` is built with React + Vite, and the Node server in `backend/` serves the built React app (`frontend/dist`) and `/api/*`.
+Needs Node 22.5 or later. Wishlist, size profiles, and reminders use MongoDB Atlas through Mongoose. The UI in `frontend/` is built with React + Vite, and the Express server in `backend/` serves the built React app (`frontend/dist`) and `/api/*`. MongoDB must be reachable before the server starts; a failed connection prints an explicit error and the HTTP server is not started.
 
 ### 1. Install
 
@@ -126,7 +126,9 @@ npm run smoke
 | `backend/src/run.js` | One question = one run. Reads register citable sources, writes become drafts, and the answer may only cite records that were actually read. |
 | `backend/src/agent-claude.js` | Claude planner: each MCP tool becomes a tool for the SDK's tool runner; write tools only create drafts. The final answer comes back through a strict `present_answer` tool. |
 | `backend/src/agent-offline.js` | Offline planner for the core demo questions plus deterministic wishlist/occasion/size workflows. |
-| `backend/src/server.js` | Local HTTP server (127.0.0.1 only): serves `frontend/dist` (with SPA fallback), a streaming `/api/ask`, approve/dismiss, app switches, reset. |
+| `backend/src/server.js` | Entry point (127.0.0.1 only): connects to MongoDB, starts the MCP apps, then starts the Express server with `app.listen()` and handles graceful shutdown. |
+| `backend/src/app.js` | Express app: `express.json()` (64 KB) and CORS middleware, the same-origin guard, static UI with SPA fallback, and a JSON error handler. |
+| `backend/src/routes/api.js` | Express router with every `/api` endpoint: status, activity, streaming `/api/ask`, approve/dismiss, app switches, mode and reset. |
 | `frontend/` | React + Vite interface: everyday landing page (`/`), developer mode (`/developers`), and prototype app (`/app`). |
 
 ### Wishlist, sizes, and occasions
