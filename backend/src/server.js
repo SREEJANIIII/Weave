@@ -109,6 +109,8 @@ async function approve(id, changes = {}) {
     verified = !check.isError && (check.data?.task?.id === record.id || check.data?.event?.id === record.id || check.data?.item?.id === record.id);
   } else if (p.tool === 'update_size_profile') {
     verified = !res.isError && Boolean(res.data?.profile);
+  } else if (p.tool === 'delete_size_profile') {
+    verified = !res.isError && res.data?.deleted === true;
   } else if (p.tool === 'delete_wishlist_item') {
     verified = !res.isError && Boolean(res.data?.deleted);
   }

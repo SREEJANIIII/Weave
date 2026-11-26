@@ -1,0 +1,14 @@
+import crypto from 'node:crypto';
+import { WishlistItem } from '../models/wishlist-item.js';
+const record = (doc) => { if (!doc) return null; const x = doc.toObject ? doc.toObject() : doc; return { id: x._id ?? x.id, kind: 'wishlist_item', product_id: x.productId ?? null, product_name: x.productName, description: x.description ?? '', brand: x.brand, price: x.price ?? null, product_url: x.productUrl, image_url: x.imageUrl ?? null, category: x.category, occasion: x.occasion ?? '', notes: x.notes ?? '', status: x.status, source: x.source, created_at: x.createdAt, updated_at: x.updatedAt }; };
+const escape = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export class WishlistRepository {
+  async count() { return WishlistItem.countDocuments(); }
+  async seed(items) { if (await this.count()) return; await WishlistItem.insertMany(items.map((x) => ({ _id: x.id, productId: x.product_id ?? null, productName: x.product_name, brand: x.brand, productUrl: x.product_url, imageUrl: x.image_url ?? null, category: x.category, occasion: x.occasion ?? '', notes: x.notes ?? '', status: x.status ?? 'saved', source: 'sample data' })), { ordered: false }); }
+  async list({ occasion, brand, category, status = 'saved' } = {}) { const query = {}; if (status !== 'all') query.status = status; for (const [key, value] of [['occasion', occasion], ['brand', brand], ['category', category]]) if (value) query[key] = new RegExp(`^${escape(value)}$`, 'i'); return (await WishlistItem.find(query).sort({ createdAt: 1, _id: 1 }).lean()).map(record); }
+  async get(id) { return record(await WishlistItem.findById(id).lean()); }
+  async search(query, limit) { const rx = new RegExp(escape(query), 'i'); return (await WishlistItem.find({ $or: [{ productName: rx }, { brand: rx }, { category: rx }, { occasion: rx }, { notes: rx }] }).sort({ productName: 1 }).limit(limit).lean()).map(record); }
+  async save(input) { const data = { _id: `wish_${crypto.randomUUID().slice(0, 8)}`, productName: input.product_name, brand: input.brand, productUrl: input.product_url, imageUrl: input.image_url ?? null, category: input.category, occasion: input.occasion ?? '', notes: input.notes ?? '', source: 'user data' }; if (input.product_id !== undefined) data.productId = input.product_id; const item = await WishlistItem.create(data); return record(item); }
+  async update(id, changes) { const mapped = {}; for (const [from, to] of Object.entries({ product_name: 'productName', brand: 'brand', product_url: 'productUrl', image_url: 'imageUrl', category: 'category', occasion: 'occasion', notes: 'notes', product_id: 'productId', status: 'status' })) if (changes[from] !== undefined) mapped[to] = changes[from]; return record(await WishlistItem.findByIdAndUpdate(id, { $set: mapped }, { new: true, runValidators: true }).lean()); }
+  async delete(id) { return record(await WishlistItem.findByIdAndDelete(id).lean()); }
+}

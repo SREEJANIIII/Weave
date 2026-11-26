@@ -1,0 +1,3 @@
+import mongoose from 'mongoose';
+const schema = new mongoose.Schema({ _id: { type: String, default: 'profile_primary' }, profilePayload: { type: String, default: null }, measurementsEncrypted: { type: Boolean, default: false }, deleted: { type: Boolean, default: false }, unit: { type: String, enum: ['cm', 'inches'], default: 'cm' }, preferredFit: { type: String, enum: ['slim', 'regular', 'oversized'], default: 'regular' }, preferredCategories: { type: [String], default: [] }, brandSizes: { type: Map, of: String, default: {} } }, { timestamps: true, versionKey: false, collection: 'sizeprofiles' });
+export const SizeProfile = mongoose.models.SizeProfile || mongoose.model('SizeProfile', schema);

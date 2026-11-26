@@ -35,7 +35,7 @@ Weave/
 
 ## Run it
 
-Needs Node 22 or later. The UI in `frontend/` is built with React + Vite, and the Node server in `backend/` serves the built React app (`frontend/dist`) and `/api/*`.
+Needs Node 22.5 or later. Wishlist, size profiles, and reminders use MongoDB Atlas through Mongoose. The UI in `frontend/` is built with React + Vite, and the Node server in `backend/` serves the built React app (`frontend/dist`) and `/api/*`.
 
 ### 1. Install
 
@@ -101,7 +101,7 @@ npm run smoke
 | Calendar, Notes, Tasks, Money, and Wishlist & sizes servers | **Real MCP servers, sample data.** The data is generated relative to today so the demo works on any day. Nothing connects to a real account or shopping platform. |
 | Money | Reads `backend/data/statement.csv` if you add one (format in `backend/data/statement.example.csv`); otherwise a sample statement. Never connects to a bank or UPI app. |
 | Approval gate | **Real.** Any tool not marked `readOnlyHint: true` is held as a draft; it runs only after you approve, then Weave reads the record back before saying "Done". |
-| Wishlist and size intelligence | **Implemented with synthetic sample data.** Wishlist CRUD, occasion tags, a clearly labelled sample size profile, deterministic brand/category charts, unit conversion, missing-measurement and between-size handling are available through the Wishlist & sizes MCP server. |
+| Wishlist and size intelligence | **Implemented with MongoDB Atlas persistence and synthetic charts.** Wishlist CRUD, occasion tags, a clearly labelled sample profile, deterministic brand/category charts, unit conversion, missing-measurement and between-size handling are available through the Wishlist & sizes MCP server. |
 | Occasion-aware reminders | **Implemented as a read-and-suggest workflow.** Upcoming records from Calendar are matched to wishlist occasion tags in configurable 30/14/7-day windows. Creating a Task or Calendar reminder remains approval-gated. Festival dates are not hardcoded. |
 | Claude planner | Built on the Anthropic SDK's tool runner with `claude-opus-5-5`. **Not tested against the live API on this machine** (no key was available). The offline path is fully tested. |
 | Email, fitness apps, travel, learning, home | **Planned.** Shown as planned in the app and not connected. |
@@ -115,7 +115,7 @@ npm run smoke
 5. Ask the same question again: the task isn't drafted twice, and the run shows as already booked.
 6. Switch **Tasks** off and ask again: Weave says what it couldn't check instead of guessing.
 7. Ask *"How much did I spend on food last week, and what was happening on those days?"* and note the caveat: the calendar is context, not the cause.
-8. **Reset demo** restores the sample data.
+8. **Reset demo** restarts MCP servers and clears pending proposals; it does not delete persistent wishlist items, measurements, or reminders.
 
 ## How it fits together
 
@@ -131,13 +131,21 @@ npm run smoke
 
 ### Wishlist, sizes, and occasions
 
-The `wishlist` MCP server exposes `list_wishlist_items`, `search_wishlist`, `get_wishlist_item`, `save_wishlist_item`, `update_wishlist_item`, `delete_wishlist_item`, `get_size_profile`, `update_size_profile`, `get_brand_size_chart`, and `match_product_size`. Writes are held for approval by the existing Run/Hub gate. Measurements are sensitive: profile reads are only used for size work, and measurement arguments are redacted from the activity feed.
+The `wishlist` MCP server exposes wishlist CRUD/search, size profile read/update/delete, synthetic chart lookup, deterministic matching, and persistent reminder tools (`list_reminders`, `reconcile_reminders`, and `dismiss_reminder`). Writes are held for approval by the existing Run/Hub gate. Measurements are sensitive: profile reads are only used for size work, matching does not return the complete profile, and measurement arguments are redacted from activity/SSE steps.
 
 The size engine in `backend/lib/size-matcher.js` is deterministic. It compares a profile against brand/category/region-specific synthetic charts and reports confidence, missing measurements, out-of-range measurements, and a disclaimer that the recommendation is not a fit guarantee. No real brand size-chart API is connected.
 
 The offline planner can answer questions such as “What have I saved for Diwali?”, “Show my wishlist for upcoming occasions”, and “Which size should I consider for this saved dress?”. It reads calendar records relative to today and matches their occasion tags; it does not calculate or assume festival dates.
 
-The sample data is in-memory and resets when the server restarts or the demo is reset. Real shopping, calendar, and task integrations, encrypted-at-rest profile storage, and user deletion controls remain planned.
+### MongoDB Atlas persistence and privacy
+
+Wishlist items, the size profile, and reminder records are stored in MongoDB Atlas through the centralized Mongoose connection in `backend/db/database.js`, models under `backend/models/`, and repositories under `backend/repositories/`. The database name is controlled by `MONGODB_DB_NAME` or the URI. Weave creates indexes through Mongoose; repeated startup is safe. There is no local or in-memory fallback.
+
+Demonstration wishlist/profile documents are inserted only when their collections are empty. Existing user data is never overwritten on startup. The `/api/reset` demo action does not delete persistent data. The size-profile delete tool marks the profile deleted and clears its payload so it is not automatically reseeded. For a development reset, stop Weave and explicitly drop the configured test database or delete its collections; never run that against a user database.
+
+Size profiles are single-user data in this prototype; there is no account authentication or multi-user isolation. Atlas encryption is not treated as application-level field encryption. For application-level encryption, set `WEAVE_PROFILE_ENCRYPTION_KEY` to a base64-encoded 32-byte key. AES-256-GCM is used with a fresh IV per update. If an encrypted profile exists without the key, reads fail safely rather than returning data. Do not commit keys, `.env`, or real data.
+
+Reminder reconciliation uses a unique `(wishlist_item_id, calendar_event_id, reminder_window)` constraint. It updates event dates for active reminders, preserves dismissed/completed/cancelled states, removes reminders for archived/deleted items and past events, and supports 30-, 14-, and 7-day windows. This is on-demand reconciliation when Weave is asked; background notifications and schedulers are not implemented.
 
 ### Configuration
 
@@ -149,9 +157,24 @@ The sample data is in-memory and resets when the server restarts or the demo is 
 | `WEAVE_EFFORT` | `medium` | `low`, `medium`, `high`, `xhigh` or `max`. |
 | `WEAVE_TODAY` | today | Pin "today" (YYYY-MM-DD) for a repeatable demo. |
 | `WEAVE_STATEMENT_CSV` | `data/statement.csv` (relative to `backend/`) | Statement file for the Money server. |
+| `MONGODB_URI` | none | Required MongoDB Atlas connection string. |
+| `MONGODB_DB_NAME` | URI-selected database | Optional database name passed to Mongoose. |
+| `WEAVE_PROFILE_ENCRYPTION_KEY` | none | Optional base64-encoded 32-byte AES-256-GCM key for size-profile encryption. |
 | `PORT` | `4321` | Server port. |
 
 Claude requests use server-side refusal fallbacks (`fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta), so if the model declines, the API retries on a fallback model. Remove those two fields in `backend/src/agent-claude.js` to turn this off.
+
+### MongoDB Atlas setup
+
+1. Create an Atlas project and free/shared cluster.
+2. Create a database user with access to the Weave database.
+3. Add the development machine's IP address under Network Access (or use the project's controlled network policy).
+4. Copy `backend/.env.example` to `backend/.env` and set `MONGODB_URI` and optionally `MONGODB_DB_NAME`. Keep credentials URL-encoded and never commit `.env`.
+5. Start Weave with `npm start`. If the URI is missing or MongoDB cannot be reached, startup fails with an explicit error; no in-memory fallback is used.
+
+Mongoose creates the `wishlistitems`, `sizeprofiles`, and `reminders` collections and their indexes. Reminder statuses are `suggested`, `pending_approval`, `approved`, `dismissed`, `completed`, and `cancelled`. Reconciliation is on demand; there is no background notification scheduler.
+
+This phase does not automatically migrate an existing SQLite file into Atlas. Existing Atlas data is preserved and sample documents are inserted only into empty collections; any SQLite-to-Atlas migration should be an explicit, reviewed data operation.
 
 ### Adding a real app
 

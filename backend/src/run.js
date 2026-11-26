@@ -29,6 +29,12 @@ function withSourceIds(server, value, depth = 0) {
 }
 
 const COUNT_KEYS = ['events', 'notes', 'tasks', 'transactions', 'slots'];
+function safeArgs(server, tool, args) {
+  if (server !== 'wishlist' || !['get_size_profile', 'update_size_profile', 'match_product_size'].includes(tool)) return args;
+  const copy = { ...args };
+  for (const key of ['bust', 'waist', 'hips', 'shoulder', 'inseam', 'height', 'measurements']) delete copy[key];
+  return { ...copy, redacted: true };
+}
 function describe(tool, data) {
   if (!data) return '';
   for (const key of COUNT_KEYS) {
@@ -87,7 +93,7 @@ export class Run {
 
   /** Read through MCP. Returns { ok, data (with source_ids), text, error }. */
   async read(server, tool, args = {}) {
-    const step = { id: this.steps.length + 1, server, app: this.app(server), tool, args, kind: 'read', status: 'running' };
+    const step = { id: this.steps.length + 1, server, app: this.app(server), tool, args: safeArgs(server, tool, args), kind: 'read', status: 'running' };
     this.steps.push(step);
     this.#step(step);
     const res = await this.hub.call(server, tool, args, { run: this.id });
@@ -127,7 +133,7 @@ export class Run {
       createdAt: new Date().toISOString(),
     });
     this.drafts.push(proposal);
-    const step = { id: this.steps.length + 1, server, app: this.app(server), tool, args, kind: 'write', status: 'held', summary: 'waiting for your approval' };
+    const step = { id: this.steps.length + 1, server, app: this.app(server), tool, args: safeArgs(server, tool, args), kind: 'write', status: 'held', summary: 'waiting for your approval' };
     this.steps.push(step);
     this.hub.log({ server, method: 'held', tool, args, ms: 0, write: true, summary: 'drafted, not run (needs approval)', run: this.id });
     this.#step(step);

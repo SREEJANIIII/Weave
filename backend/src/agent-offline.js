@@ -88,6 +88,14 @@ async function wishlistAndOccasions(run) {
   }
   if (!items.length && saved.length) for (const item of saved) items.push({ text: `${item.product_name} (${item.brand}) — saved for ${item.occasion || 'no occasion tag'}.`, detail: item.notes || '', source_ids: [`wishlist:${item.id}`] });
   if (items.length) sections.push({ title: events.length ? 'Saved for upcoming occasions' : 'Saved products', items: items.slice(0, 12) });
+  if (/remind|reminder|upcoming occasion/.test(q) && events.length && has('calendar')) {
+    const candidates = saved.filter((item) => events.some((event) => item.occasion && `${event.occasion ?? ''} ${event.title}`.toLowerCase().includes(item.occasion.toLowerCase())));
+    if (candidates.length) run.propose('wishlist', 'reconcile_reminders', {
+      items: candidates.map((item) => ({ id: item.id, occasion: item.occasion, status: item.status })),
+      events: events.filter((event) => candidates.some((item) => item.occasion && `${event.occasion ?? ''} ${event.title}`.toLowerCase().includes(item.occasion.toLowerCase()))).map((event) => ({ id: event.id, title: event.title, date: event.date, occasion: event.occasion })),
+      windows: [30, 14, 7],
+    }, { why: 'These saved products match upcoming occasion events; approval will persist deduplicated reminder suggestions.', sourceIds: items.flatMap((item) => item.source_ids) });
+  }
 
   if (/size|fit|measurements?/.test(q)) {
     const target = saved[0];

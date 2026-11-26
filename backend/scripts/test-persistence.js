@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import { connectDatabase, closeDatabase } from '../db/database.js';
+import { WishlistItem } from '../models/wishlist-item.js';
+import { SizeProfile } from '../models/size-profile.js';
+import { Reminder } from '../models/reminder.js';
+import { WishlistRepository } from '../repositories/wishlist-repository.js';
+import { SizeProfileRepository } from '../repositories/size-profile-repository.js';
+import { ReminderRepository } from '../repositories/reminder-repository.js';
+import { wishlistItems, sizeProfile } from '../mcp-servers/lib/sample-data.js';
+
+if (!process.env.MONGODB_URI) throw new Error('Persistence tests require MONGODB_URI and use an isolated database name.');
+const originalDb = process.env.MONGODB_DB_NAME;
+process.env.MONGODB_DB_NAME = `weave_test_${process.pid}`;
+process.env.WEAVE_PROFILE_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
+await connectDatabase();
+await Promise.all([WishlistItem.deleteMany({}), SizeProfile.deleteMany({}), Reminder.deleteMany({})]);
+const wishlist = new WishlistRepository(); const profiles = new SizeProfileRepository(); const reminders = new ReminderRepository();
+await wishlist.seed(wishlistItems()); await profiles.seed(sizeProfile());
+const saved = await wishlist.save({ product_name: 'Test coat', brand: 'Test brand', product_url: 'https://example.test/test-coat', category: 'coat', occasion: 'Wedding' });
+assert.ok(saved.id); assert.equal((await profiles.get()).measurements.bust, 88);
+await profiles.update({ bust: 90, preferred_fit: 'slim' });
+const event = { id: 'evt_test', title: 'Wedding dinner', date: '2099-06-15', occasion: 'Wedding' };
+await reminders.reconcile([saved], [event], [30], '2099-05-01'); await reminders.reconcile([saved], [event], [30], '2099-05-01');
+const reminder = (await reminders.list('suggested'))[0]; assert.ok(reminder); await reminders.dismiss(reminder.id); assert.equal((await reminders.list('suggested')).length, 0);
+await closeDatabase();
+
+await connectDatabase();
+assert.equal((await wishlist.get(saved.id)).product_name, 'Test coat'); assert.equal((await profiles.get()).measurements.bust, 90); assert.equal((await reminders.list())[0].status, 'dismissed');
+await wishlist.update(saved.id, { notes: 'updated' }); assert.equal((await wishlist.get(saved.id)).notes, 'updated');
+await wishlist.delete(saved.id); assert.equal(await wishlist.get(saved.id), null); await profiles.delete(); assert.equal(await profiles.get(), null);
+await Promise.all([WishlistItem.deleteMany({}), SizeProfile.deleteMany({}), Reminder.deleteMany({})]);
+await closeDatabase();
+if (originalDb === undefined) delete process.env.MONGODB_DB_NAME; else process.env.MONGODB_DB_NAME = originalDb;
+console.log('  ✓ MongoDB persistence, encryption, restart, dedupe, dismissal, and deletion checks passed');

@@ -42,9 +42,9 @@ const ok = (label) => console.log(`  ✓ ${label}`);
 try {
   const status = await waitForServer();
   assert.equal(status.apps.filter((a) => a.status === 'connected').length, 5, 'five MCP apps connected');
-  assert.equal(status.apps.flatMap((a) => a.tools).length, 22, 'twenty-two tools discovered');
-  assert.deepEqual(status.apps.flatMap((a) => a.tools.filter((t) => !t.readOnly).map((t) => t.name)).sort(), ['create_event', 'create_task', 'delete_wishlist_item', 'save_wishlist_item', 'update_size_profile', 'update_wishlist_item']);
-  ok('5 MCP servers connected, 22 tools, 6 marked as changing data');
+  assert.equal(status.apps.flatMap((a) => a.tools).length, 26, 'twenty-six tools discovered');
+  assert.deepEqual(status.apps.flatMap((a) => a.tools.filter((t) => !t.readOnly).map((t) => t.name)).sort(), ['create_event', 'create_task', 'delete_size_profile', 'delete_wishlist_item', 'dismiss_reminder', 'reconcile_reminders', 'save_wishlist_item', 'update_size_profile', 'update_wishlist_item']);
+  ok('5 MCP servers connected, 26 tools, 9 marked as changing data');
 
   // Question 1
   const q1 = await ask(status.suggestions[0]);

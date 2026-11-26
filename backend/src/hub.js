@@ -34,6 +34,8 @@ export class Hub {
 
   async start() {
     await Promise.all(SERVER_DEFS.map((def) => this.#connect(def)));
+    const wishlist = this.servers.get('wishlist');
+    if (wishlist?.status === 'error') throw new Error(`Wishlist & sizes could not start: ${wishlist.error}`);
   }
 
   async restart() {
@@ -52,7 +54,7 @@ export class Hub {
     const entry = { def, client: null, tools: [], status: 'connecting', enabled, error: null, data: 'sample data' };
     this.servers.set(def.id, entry);
     const env = Object.fromEntries(
-      ['PATH', 'HOME', 'TZ', 'WEAVE_TODAY', 'WEAVE_STATEMENT_CSV'].filter((k) => process.env[k]).map((k) => [k, process.env[k]]),
+      ['PATH', 'HOME', 'TZ', 'WEAVE_TODAY', 'WEAVE_STATEMENT_CSV', 'MONGODB_URI', 'MONGODB_DB_NAME', 'WEAVE_PROFILE_ENCRYPTION_KEY'].filter((k) => process.env[k]).map((k) => [k, process.env[k]]),
     );
     try {
       const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(this.root, def.script)], cwd: this.root, env, stderr: 'inherit' });

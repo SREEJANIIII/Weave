@@ -1,0 +1,8 @@
+import { decryptProfile, encryptProfile } from '../db/database.js';
+import { SizeProfile } from '../models/size-profile.js';
+export class SizeProfileRepository {
+  async seed(profile) { if (await SizeProfile.exists({})) return; const stored = encryptProfile(profile); await SizeProfile.create({ _id: profile.id, profilePayload: stored.payload, measurementsEncrypted: stored.encrypted, deleted: false, unit: profile.unit, preferredFit: profile.preferred_fit, preferredCategories: profile.preferred_categories }); }
+  async get() { const row = await SizeProfile.findOne({ deleted: false }).lean(); if (!row || !row.profilePayload) return null; const profile = decryptProfile(row.profilePayload, row.measurementsEncrypted); return { ...profile, kind: 'size_profile' }; }
+  async update(changes) { const current = await this.get(); if (!current) return null; const next = { ...current, measurements: { ...current.measurements, ...Object.fromEntries(Object.entries(changes).filter(([key]) => ['bust', 'waist', 'hips', 'shoulder', 'inseam', 'height'].includes(key))) } }; for (const key of ['unit', 'preferred_fit', 'preferred_categories']) if (changes[key] !== undefined) next[key] = changes[key]; const stored = encryptProfile(next); await SizeProfile.updateOne({ _id: next.id }, { $set: { profilePayload: stored.payload, measurementsEncrypted: stored.encrypted, deleted: false, unit: next.unit, preferredFit: next.preferred_fit, preferredCategories: next.preferred_categories } }); return next; }
+  async delete() { await SizeProfile.updateMany({}, { $set: { deleted: true, profilePayload: null } }); return true; }
+}
