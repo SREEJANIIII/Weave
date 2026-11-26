@@ -18,7 +18,9 @@ const state = {
 };
 
 async function main() {
-  try {
+  if (!process.env.MONGODB_URI) {
+    console.log('  Database  not set up (MONGODB_URI is empty); Wishlist & sizes stays off, everything else works.');
+  } else try {
     await connectDatabase();
     console.log('  Database  MongoDB connected');
   } catch (err) {
