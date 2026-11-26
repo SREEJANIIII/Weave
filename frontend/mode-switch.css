@@ -1,0 +1,45 @@
+/* The developer mode switch: a link styled as a switch, docked bottom right on both landing pages. */
+.mode-switch {
+  position: fixed; right: var(--space-lg); bottom: var(--space-lg); z-index: var(--z-sticky);
+  display: inline-flex; align-items: center; gap: var(--space-sm);
+  min-height: 48px; padding: 0 var(--space-sm) 0 var(--space-md);
+  border: 1px solid var(--color-edge); border-radius: var(--radius-pill);
+  background: var(--color-paper-3); color: var(--color-ink); box-shadow: var(--shadow-lift);
+  font: 600 var(--text-sm)/1 var(--font-body); white-space: nowrap; text-decoration: none;
+  transition: border-color var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+.mode-switch:hover { border-color: var(--color-ink); }
+.mode-switch:active { transform: translateY(1px); }
+.mode-switch:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.mode-switch-track { position: relative; width: 40px; height: 24px; flex-shrink: 0; border-radius: var(--radius-pill); background: var(--color-rule-strong); transition: background-color var(--dur-short) var(--ease-out); }
+.mode-switch-thumb { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--color-paper-3); box-shadow: var(--shadow-thumb); transition: transform var(--dur-short) var(--ease-out); }
+.mode-switch.is-on .mode-switch-track { background: var(--color-ink); }
+.mode-switch.is-on .mode-switch-thumb { transform: translateX(16px); }
+/* Keep the last footer links clear of the docked switch. */
+body:has(.mode-switch) .footer { padding-bottom: calc(var(--space-3xl) + 48px); }
+.mode-short { display: none; }
+@media (max-width: 40rem) {
+  .mode-switch { right: var(--space-md); bottom: var(--space-md); min-height: 44px; gap: var(--space-xs); padding-left: var(--space-sm); font-size: var(--text-xs); }
+  .mode-long { display: none; }
+  .mode-short { display: inline; }
+}
+
+/* ---------- Page transitions ---------- */
+/* Same-origin navigations cross-fade. The developer mode switch gets a woven curtain:
+   the new page drops in as interleaved threads, odd ones from the top, even ones from the bottom. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  html:active-view-transition-type(mode)::view-transition-old(root) { animation: vt-recede 820ms var(--ease-in-out) both; }
+  html:active-view-transition-type(mode)::view-transition-new(root) {
+    animation: vt-weave 820ms var(--ease-in-out) both;
+    -webkit-mask-image: linear-gradient(90deg, var(--color-ink) 50%, transparent 50%), linear-gradient(90deg, transparent 50%, var(--color-ink) 50%);
+    mask-image: linear-gradient(90deg, var(--color-ink) 50%, transparent 50%), linear-gradient(90deg, transparent 50%, var(--color-ink) 50%);
+    -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x;
+    -webkit-mask-position: top left, bottom left; mask-position: top left, bottom left;
+  }
+}
+@keyframes vt-weave {
+  from { -webkit-mask-size: 48px 0%, 48px 0%; mask-size: 48px 0%, 48px 0%; }
+  to { -webkit-mask-size: 48px 100%, 48px 100%; mask-size: 48px 100%, 48px 100%; }
+}
+@keyframes vt-recede { to { transform: scale(0.96); opacity: 0.4; } }

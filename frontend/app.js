@@ -1,636 +1,601 @@
-// Weave prototype UI. Plain modules, no build step.
-import { icons } from './icons.js';
+// Weave prototype app. Talks to the local server's /api: status, a streamed /api/ask (SSE),
+// draft approval, app switches, planner mode and reset. All server text is set as text, never HTML.
 
-const $ = (sel, el = document) => el.querySelector(sel);
-const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const icon = (name, cls = '') => `<span class="i ${cls}">${icons[name] ?? ''}</span>`;
-const APP_ICON = { calendar: 'calendar', notes: 'notes', tasks: 'tasks', money: 'money', email: 'mail', fitness: 'fitness', travel: 'travel', learning: 'learning', home: 'home' };
-
-const state = {
-  status: null,
-  run: null,
-  open: new Set(),
-  tab: 'sources',
-  activity: [],
-  editing: null,
-  busy: new Set(),
+const S = { status: null, run: null, activity: [], tab: 'apps', busy: false, editing: new Set(), edits: new Map(), offline: false };
+const YARN = { calendar: 'calendar', notes: 'notes', tasks: 'tasks', money: 'money' };
+const ICON = { calendar: 'i-calendar', notes: 'i-notes', tasks: 'i-tasks', money: 'i-money', email: 'i-mail', fitness: 'i-fitness', travel: 'i-plug', learning: 'i-plug', home: 'i-plug' };
+// Short chip labels for the two demo questions; the full question is what gets asked.
+const SHORT = {
+  'What should I follow up on today, and when can I fit in a workout?': 'Follow-ups and a workout today',
+  'How much did I spend on food last week, and what was happening on those days?': 'Food spending last week',
 };
+const EDITABLE = { create_task: [['title', 'text', 'Title'], ['due', 'date', 'Due']], create_event: [['title', 'text', 'Title'], ['date', 'date', 'Date'], ['start', 'time', 'Start'], ['end', 'time', 'End']] };
 
-// ---------- formatting ----------
-const pad = (n) => String(n).padStart(2, '0');
-function fmtTime(hhmm, suffix = true) {
-  const [h, m] = hhmm.split(':').map(Number);
-  const h12 = ((h + 11) % 12) + 1;
-  return suffix ? `${h12}:${pad(m)} ${h >= 12 ? 'pm' : 'am'}` : `${h12}:${pad(m)}`;
+/* ---------- Small DOM helpers ---------- */
+const $ = (sel, root = document) => root.querySelector(sel);
+function el(tag, props = {}, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined && kid !== false) node.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  return node;
 }
-function fmtRange(a, b) {
-  const half = (t) => Number(t.split(':')[0]) >= 12;
-  return half(a) === half(b) ? `${fmtTime(a, false)}–${fmtTime(b)}` : `${fmtTime(a)}–${fmtTime(b)}`;
+function icon(id, cls = 'icon') {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', cls);
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `#${id}`);
+  svg.append(use);
+  return svg;
 }
-const parseISO = (iso) => {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d);
-};
-function relDay(iso) {
-  if (!iso) return '';
-  const diff = Math.round((parseISO(iso) - parseISO(state.status.today)) / 86400000);
-  if (diff === 0) return 'today';
-  if (diff === 1) return 'tomorrow';
-  if (diff === -1) return 'yesterday';
-  return parseISO(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-}
-const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-const money = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
-function modelName(id = '') {
-  const parts = id.replace(/^claude-/, '').split('-');
-  return parts.length ? `${cap(parts[0])} ${parts.slice(1).join('.')}`.trim() : id;
-}
-const fmtDuration = (ms) => (ms < 1000 ? `${Math.max(1, Math.round(ms))} ms` : `${(ms / 1000).toFixed(1)} s`);
-const plannerLabel = (mode, model) => (mode === 'claude' ? `Claude ${modelName(model)}` : 'Offline script');
-const compactArgs = (args = {}) =>
-  Object.entries(args)
-    .filter(([, v]) => v !== undefined && v !== '' && v !== null)
-    .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(',') : v}`)
-    .join(' ');
+const swatch = (yarn) => el('span', { class: 'swatch', 'data-yarn': yarn, 'aria-hidden': 'true' });
+const spinner = () => el('span', { class: 'spinner', 'aria-hidden': 'true' });
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const listJoin = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
 
-// ---------- API ----------
-async function api(url, body) {
-  const res = await fetch(url, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+/* ---------- Formatting ---------- */
+const dayFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const fmtDate = (iso) => (iso ? dayFmt.format(new Date(`${iso}T00:00:00`)) : '');
+const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+const clock = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function fmtArgs(args) {
+  if (!args || typeof args !== 'object') return '';
+  return Object.entries(args)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${k.replace(/_/g, ' ')} ${Array.isArray(v) ? v.join(', ') : String(v).slice(0, 48)}`)
+    .join(', ');
+}
+function describeRecord(r) {
+  switch (r.kind) {
+    case 'event': return { title: r.title, meta: [`${fmtDate(r.date)}, ${r.start} to ${r.end}`, r.location].filter(Boolean).join(', '), snippet: r.attendees?.length ? `With ${listJoin(r.attendees)}` : '' };
+    case 'task': return { title: r.title, meta: [r.due ? `Due ${fmtDate(r.due)}` : 'No due date', r.list && `${r.list} list`, r.status === 'done' && 'done'].filter(Boolean).join(', '), snippet: '' };
+    case 'note': return { title: r.title, meta: r.updated ? `Updated ${fmtDate(r.updated)}` : '', snippet: r.snippet ?? '' };
+    case 'transaction': return { title: r.merchant, meta: `${money.format(r.amount)}, ${fmtDate(r.date)}`, snippet: r.category ?? '' };
+    case 'summary': return { title: r.title, meta: `${money.format(r.total)} across ${plural(r.count, 'purchase')}`, snippet: '' };
+    default: return { title: r.title ?? r.id, meta: '', snippet: '' };
+  }
+}
+
+/* ---------- Server ---------- */
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok && !data.proposal) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
+  return { ok: res.ok, status: res.status, data };
 }
-
 let toastTimer;
-function toast(text) {
-  const el = $('#toast');
-  el.textContent = text;
-  el.hidden = false;
-  el.style.animation = 'none';
-  void el.offsetWidth;
-  el.style.animation = '';
+function toast(message) {
+  const t = $('#toast');
+  t.textContent = message;
+  t.classList.add('is-on');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), 2600);
+  toastTimer = setTimeout(() => t.classList.remove('is-on'), 5000);
 }
 
-// ---------- top bar ----------
-function renderTopbar() {
-  const s = state.status;
-  $('#today').textContent = s.todayLabel;
-  const claude = s.planners.claude;
-  $('#planner').innerHTML = `
-    <button type="button" data-mode="claude" aria-pressed="${s.mode === 'claude'}" ${claude.credentials ? '' : 'disabled'}
-      title="${claude.credentials ? `Claude chooses the MCP tools (${esc(claude.model)}, effort ${esc(claude.effort)})` : 'Set ANTHROPIC_API_KEY and restart the server to use Claude'}">
-      Claude <span class="sub">${claude.credentials ? esc(modelName(claude.model)) : 'needs a key'}</span>
-    </button>
-    <button type="button" data-mode="offline" aria-pressed="${s.mode === 'offline'}" title="A fixed script for the two demo questions. Same MCP calls, no model.">
-      Offline <span class="sub">script</span>
-    </button>`;
-}
-
-// ---------- rail ----------
-function renderRail() {
-  const { apps, planned } = state.status;
-  $('#apps').innerHTML = apps
-    .map((a) => {
-      const connected = a.status === 'connected';
-      const on = connected && a.enabled;
-      const sub = !connected ? 'Not connected' : !a.enabled ? 'Switched off' : `${cap(a.data)} · ${a.tools.length} tools`;
-      return `
-      <li class="app ${on ? '' : 'off'} ${state.open.has(a.id) ? 'open' : ''}" data-app="${a.id}">
-        <div class="app-row">
-          <span class="app-icon">${icon(APP_ICON[a.id])}</span>
-          <button type="button" class="app-text" data-action="expand" aria-expanded="${state.open.has(a.id)}" title="Show the tools this MCP server offers">
-            <span class="app-name">${esc(a.name)}</span>
-            <span class="app-sub">${esc(sub)}</span>
-          </button>
-          <button type="button" class="switch" role="switch" data-action="toggle" aria-checked="${on}" aria-label="Let Weave use ${esc(a.name)}" ${connected ? '' : 'disabled'}></button>
-        </div>
-        <ul class="app-tools">
-          ${a.tools.map((t) => `<li title="${esc(t.description)}"><span>${esc(t.name)}</span><span class="tag ${t.readOnly ? 'read' : 'write'}">${t.readOnly ? 'Reads' : 'Asks first'}</span></li>`).join('')}
-        </ul>
-      </li>`;
-    })
-    .join('');
-  $('#planned').innerHTML = planned
-    .map(
-      (p) => `
-      <li class="app" title="${esc(p.blurb)}. Not connected yet.">
-        <div class="app-row">
-          <span class="app-icon">${icon(APP_ICON[p.id] ?? 'plug')}</span>
-          <span class="app-text"><span class="app-name">${esc(p.name)}</span></span>
-          <span class="pill-planned">Planned</span>
-        </div>
-      </li>`,
-    )
-    .join('');
-  const tools = apps.flatMap((a) => a.tools);
-  const writes = tools.filter((t) => !t.readOnly).map((t) => t.name);
-  $('#railFoot').innerHTML = `
-    <div><strong>MCP</strong> · ${apps.filter((a) => a.status === 'connected').length} servers · ${tools.length} tools</div>
-    <div>Changes always ask first: <span class="mono">${writes.map(esc).join(', ')}</span></div>
-    <div style="margin-top:6px">Local prototype. Every app here runs on sample data.</div>`;
-  const using = apps.filter((a) => a.status === 'connected' && a.enabled).map((a) => a.name);
-  $('#composerMeta').textContent = using.length ? `Reads from ${using.join(', ')}` : 'No apps switched on';
-}
-
-// ---------- intro ----------
-function renderIntro() {
-  const h = state.status.hour;
-  $('#greeting').textContent = h < 12 ? 'Good morning.' : h < 17 ? 'Good afternoon.' : 'Good evening.';
-  $('#subline').textContent = 'Ask one question across your calendar, notes, tasks and spending. Every answer shows where it came from, and nothing changes without your OK.';
-  $('#suggestions').innerHTML = `<h2 class="label">Try asking</h2>${state.status.suggestions
-    .map((q) => `<button type="button" class="suggestion" data-q="${esc(q)}"><span class="arrow">→</span><span>${esc(q)}</span></button>`)
-    .join('')}`;
-}
-
-// ---------- result ----------
-function citeButtons(ids, byId) {
-  return ids
-    .map((id) => byId.get(id))
-    .filter((s) => s?.n)
-    .sort((a, b) => a.n - b.n)
-    .map((s) => `<button type="button" class="cite" data-src="${esc(s.source_id)}" aria-label="Source ${s.n}: ${esc(s.record.title ?? s.record.merchant ?? '')}">${s.n}</button>`)
-    .join('');
-}
-
-function stepRow(s) {
-  const glyph = { running: icon('loader', 'spin wait'), done: icon('check', 'ok'), error: icon('alert', 'err'), held: icon('lock', 'held') }[s.status] ?? '';
-  return `<li class="step ${s.kind === 'write' ? 'is-write' : ''} ${s.isNew ? 'is-new' : ''}">
-    ${glyph}
-    <span class="step-app">${esc(s.app)}</span>
-    <span class="step-tool">${esc(s.tool)} <span class="args">${esc(compactArgs(s.args))}</span></span>
-    <span class="step-sum">${esc(s.status === 'running' ? 'reading…' : s.summary ?? '')}</span>
-    <span class="step-ms">${s.ms != null && s.kind === 'read' ? `${s.ms} ms` : ''}</span>
-  </li>`;
-}
-
-function draftFacts(p) {
-  const a = p.args;
-  if (p.tool === 'create_task') return [['clock', a.due ? `Due ${relDay(a.due)}` : 'No due date'], ['tasks', a.list || 'Inbox']];
-  if (p.tool === 'create_event') return [['calendar', `${cap(relDay(a.date))}, ${fmtRange(a.start, a.end)}`], a.location ? ['mapPin', a.location] : null].filter(Boolean);
-  return Object.entries(a).map(([k, v]) => ['info', `${k}: ${v}`]);
-}
-
-function draftCard(p, byId) {
-  const kind = { create_task: 'New task', create_event: 'New calendar event' }[p.tool] ?? p.toolTitle;
-  const statusMap = {
-    pending: ['pending', 'lock', 'Waiting for your OK'],
-    running: ['pending', 'loader', 'Adding…'],
-    done: ['done', 'checkCircle', 'Done'],
-    unverified: ['unverified', 'alert', "Couldn't confirm"],
-    failed: ['failed', 'alert', "Didn't go through"],
-    dismissed: ['dismissed', 'x', 'Dismissed'],
-  };
-  const busy = state.busy.has(p.id);
-  const [cls, ico, text] = statusMap[busy ? 'running' : p.status] ?? statusMap.pending;
-  const editing = state.editing === p.id && p.status === 'pending';
-  let body = '';
-  if (editing) {
-    const a = p.args;
-    body = `<div class="edit-grid">
-      <label class="field wide">Title<input name="title" value="${esc(a.title)}" /></label>
-      ${p.tool === 'create_task' ? `<label class="field">Due<input type="date" name="due" value="${esc(a.due ?? '')}" /></label>` : ''}
-      ${p.tool === 'create_event' ? `<label class="field">Date<input type="date" name="date" value="${esc(a.date)}" /></label>
-        <label class="field">Starts<input type="time" name="start" value="${esc(a.start)}" /></label>
-        <label class="field">Ends<input type="time" name="end" value="${esc(a.end)}" /></label>` : ''}
-    </div>
-    <div class="draft-actions">
-      <button type="button" class="btn btn-text btn-sm" data-action="cancel-edit">Cancel</button>
-      <button type="button" class="btn btn-blue btn-sm" data-action="approve-edited">Approve with changes</button>
-    </div>`;
-  } else {
-    body = `<h4 class="draft-title">${esc(p.args.title ?? kind)}</h4>
-      <div class="draft-facts">${draftFacts(p).map(([i, t]) => `<span>${icon(i)}${esc(t)}</span>`).join('')}</div>
-      ${p.why ? `<div class="draft-why"><em>Why:</em> ${esc(p.why)}${citeButtons(p.sourceIds, byId)}</div>` : ''}`;
-    if (p.status === 'pending') {
-      body += `<div class="draft-actions">
-        <button type="button" class="btn btn-text btn-sm" data-action="dismiss" ${busy ? 'disabled' : ''}>Dismiss</button>
-        <button type="button" class="btn btn-ghost btn-sm" data-action="edit" ${busy ? 'disabled' : ''}>${icon('pencil')}Edit</button>
-        <button type="button" class="btn btn-blue btn-sm" data-action="approve" ${busy ? 'disabled' : ''}>Approve</button>
-      </div>`;
-    } else if (p.status === 'done' && p.result) {
-      const conflicts = (p.conflicts ?? []).length ? ` It overlaps “${esc(p.conflicts[0].title)}”.` : '';
-      body += `<div class="draft-result">${icon('checkCircle')}<div>Added to ${esc(p.app)}, then read back from ${esc(p.app)} to confirm <code>${esc(p.result.id)}</code>.${conflicts}</div></div>`;
-    } else if (p.status === 'failed' || p.status === 'unverified') {
-      body += `<div class="draft-result bad">${icon('alert')}<div>${esc(p.error ?? `${p.app} didn't confirm the change, so Weave isn't calling it done.`)}</div></div>`;
-    }
-  }
-  return `<article class="draft ${p.status === 'dismissed' ? 'is-dismissed' : ''} ${p.status === 'done' ? 'is-done' : ''}" data-proposal="${esc(p.id)}">
-    <div class="draft-head">
-      <span class="app-icon">${icon(APP_ICON[p.server] ?? 'plug')}</span>
-      <span class="draft-kind">${esc(kind)}</span><span>· ${esc(p.app)}</span>
-      <span class="status ${cls}">${icon(ico, busy ? 'spin' : '')}${esc(text)}</span>
-    </div>
-    ${body}
-  </article>`;
-}
-
-function renderResult() {
-  const r = state.run;
-  const el = $('#result');
-  document.body.classList.toggle('has-result', Boolean(r));
-  if (!r) {
-    el.innerHTML = '';
-    return;
-  }
-  const a = r.answer;
-  const byId = new Map((a?.sources ?? []).map((s) => [s.source_id, s]));
-  const reads = r.steps.filter((s) => s.kind === 'read');
-
-  let meta;
-  if (r.running) {
-    const done = reads.filter((s) => s.status !== 'running').length;
-    meta = `<span class="working">${icon('loader', 'spin')}Reading your apps${reads.length ? ` · ${done} of ${reads.length} calls back` : ''}</span><span class="dot"></span><span>${esc(plannerLabel(r.mode, r.model))}</span>`;
-  } else {
-    const apps = a?.stats.apps ?? [];
-    meta = `${apps.length ? `<span class="apps-used">${apps.map((n) => icon(APP_ICON[n.toLowerCase()] ?? 'plug')).join('')}${esc(apps.join(' · '))}</span><span class="dot"></span>` : ''}
-      <span>${reads.length} MCP read${reads.length === 1 ? '' : 's'}</span><span class="dot"></span>
-      <span>${fmtDuration(a?.stats.ms ?? r.ms ?? 0)}</span><span class="dot"></span>
-      <span>${esc(plannerLabel(r.mode, r.model))}</span>
-      <span class="dot"></span><button type="button" class="btn btn-text btn-sm" data-action="clear" style="height:24px;margin-left:-6px">Start over</button>`;
-  }
-
-  let answerHtml = '';
-  if (a) {
-    const sections = a.sections
-      .map((sec) => {
-        const single = sec.items.length === 1;
-        return `<section class="section">
-          <h3 class="label">${esc(sec.title)}</h3>
-          <ol class="items">${sec.items
-            .map(
-              (it, i) => `<li class="item" style="${single ? 'grid-template-columns:0 1fr;gap:0' : ''}">
-                <span class="n">${single ? '' : i + 1}</span>
-                <div class="item-text">${esc(it.text)}${citeButtons(it.sourceIds, byId)}</div>
-                ${it.detail ? `<div class="item-detail">${esc(it.detail)}</div>` : ''}
-              </li>`,
-            )
-            .join('')}</ol>
-        </section>`;
-      })
-      .join('');
-    const pending = a.proposals.filter((p) => p.status === 'pending').length;
-    const drafts = a.proposals.length
-      ? `<section class="drafts">
-          <h3 class="label">${pending ? `Needs your OK <span class="count">${pending}</span>` : 'Changes'}</h3>
-          ${a.proposals.map((p) => draftCard(p, byId)).join('')}
-        </section>`
-      : '';
-    const caveats = a.caveats.length ? `<div class="caveats">${a.caveats.map((c) => `<div class="caveat">${icon('info')}<span>${esc(c)}</span></div>`).join('')}</div>` : '';
-    answerHtml = `<div class="reveal" ${r.revealed ? 'style="--x:0"' : ''}>
-      <p class="headline">${esc(a.headline)}</p>
-      ${sections}${drafts}${caveats}
-    </div>`;
-  }
-
-  const error = r.error
-    ? `<div class="error-card">${icon('alert')}<div><strong>${esc(r.error.message)}</strong>${esc(r.error.hint ?? '')}</div></div>`
-    : '';
-  const traceOpen = r.running || r.traceOpen;
-  const trace = r.steps.length
-    ? `<details class="trace" ${traceOpen ? 'open' : ''}>
-        <summary>${icon('chevronRight')}How Weave got this · ${r.steps.length} MCP ${r.steps.length === 1 ? 'call' : 'calls'}${r.steps.some((s) => s.kind === 'write') ? `, ${r.steps.filter((s) => s.kind === 'write').length} held for approval` : ''}</summary>
-        <ol class="steps">${r.steps.map(stepRow).join('')}</ol>
-      </details>`
-    : '';
-
-  el.innerHTML = `<h2 class="q-title">${esc(r.question)}</h2><div class="meta">${meta}</div>${error}${answerHtml}${trace}`;
-  r.steps.forEach((s) => (s.isNew = false));
-  const reveal = $('.reveal', el);
-  if (reveal && r.revealed) reveal.classList.remove('reveal');
-  if (reveal) r.revealed = true;
-  $('.trace', el)?.addEventListener('toggle', (e) => {
-    // Ignore the toggle a replaced element fires after a re-render; only keep the person's own clicks.
-    if (!r.running && e.target.isConnected) r.traceOpen = e.target.open;
-  });
-}
-
-// ---------- sources & activity ----------
-function sourceCard(s) {
-  const r = s.record;
-  const kind = { event: 'Event', note: 'Note', task: 'Task', transaction: 'Purchase', summary: 'Summary' }[r.kind] ?? r.kind;
-  let when = '';
-  let title = r.title ?? '';
-  let lines = '';
-  let body = '';
-  if (r.kind === 'event') {
-    when = cap(relDay(r.date));
-    lines = `<div class="src-line">${fmtRange(r.start, r.end)}${r.location ? ` · ${esc(r.location)}` : ''}</div>${r.attendees?.length ? `<div class="src-line">With ${esc(r.attendees.join(', '))}</div>` : ''}`;
-  } else if (r.kind === 'note') {
-    when = `Edited ${relDay(r.updated)}`;
-    if (r.action_items?.length) {
-      body = `<ul class="src-body">${r.action_items
-        .map((it) => `<li class="${it.done ? 'done' : ''} ${it.owner === 'me' ? 'mine' : ''}"><span class="box"></span><span><span class="owner">@${esc(it.owner)}</span> ${esc(it.text)}</span></li>`)
-        .join('')}</ul>`;
-    } else if (r.body) {
-      const ls = r.body.split('\n').filter((l) => l.trim()).slice(0, 4);
-      body = `<ul class="src-body">${ls.map((l) => `<li><span>${esc(l.replace(/^- /, ''))}</span></li>`).join('')}</ul>`;
-    } else if (r.snippet) {
-      lines = `<div class="src-line">${esc(r.snippet)}</div>`;
-    }
-  } else if (r.kind === 'task') {
-    when = r.due ? `Due ${relDay(r.due)}` : 'No due date';
-    lines = `<div class="src-line">${esc(r.list)} list · ${r.status === 'done' ? 'Done' : 'Open'}</div>`;
-  } else if (r.kind === 'transaction') {
-    when = cap(relDay(r.date));
-    title = r.merchant;
-    lines = `<div class="src-line" style="display:flex">${esc(r.category)}<span class="src-amount">${money(r.amount)}</span></div>`;
-  } else if (r.kind === 'summary') {
-    lines = `<div class="src-line" style="display:flex">${r.count} purchases<span class="src-amount">${money(r.total)}</span></div>`;
-  }
-  return `<article class="src" data-src="${esc(s.source_id)}">
-    <div class="src-head">${s.n ? `<span class="n">${s.n}</span>` : ''}<span class="kind">${esc(s.app)} · ${esc(kind)}</span><span class="when">${esc(when)}</span></div>
-    <div class="src-title">${esc(title)}</div>${lines}${body}
-  </article>`;
-}
-
-function renderSources() {
-  const el = $('#sources');
-  const r = state.run;
-  const a = r?.answer;
-  const cited = a?.sources.filter((s) => s.n) ?? [];
-  const other = a?.sources.filter((s) => !s.n) ?? [];
-  $('#sourcesCount').textContent = a ? String(cited.length) : '';
-  if (!r) {
-    el.innerHTML = `<div class="panel-empty"><span class="big">Sources show up here.</span>Every point Weave makes links to the exact event, note, task or purchase it came from, so you can check it.</div>`;
-    return;
-  }
-  if (!a) {
-    el.innerHTML = `<div class="panel-empty"><span class="big">${r.running ? 'Gathering sources…' : 'No sources.'}</span>${r.running ? 'Weave is reading only what this question needs.' : ''}</div>`;
-    return;
-  }
-  el.innerHTML = `<div class="${r.sourcesShown ? '' : 'fresh'}">
-    <div class="group-label"><span class="label">Cited in this answer</span></div>
-    ${cited.map(sourceCard).join('') || '<div class="panel-empty">Nothing cited.</div>'}
-    ${other.length ? `<details class="uncited"><summary><span class="label">Read but not cited · ${other.length}</span>${icon('chevronDown')}</summary>${other.map(sourceCard).join('')}</details>` : ''}
-  </div>`;
-  r.sourcesShown = true;
-}
-
-async function refreshActivity() {
+async function loadStatus() {
   try {
-    state.activity = (await api('/api/activity')).activity;
+    const r = await api('/api/status');
+    if (!r.ok) throw new Error();
+    S.status = r.data;
+    S.offline = false;
   } catch {
-    /* ignore */
+    S.offline = true;
   }
-  renderActivity();
+  renderAll();
+  if (!S.offline) loadActivity();
 }
-
-function renderActivity() {
-  const el = $('#activity');
-  const items = [...state.activity].reverse();
-  $('#activityCount').textContent = items.length ? String(items.length) : '';
-  const time = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  el.innerHTML = `<p class="log-note">Every message between Weave (the MCP client) and each app's MCP server, newest first.</p>
-    <ul class="log">${items
-      .map(
-        (x) => `<li class="${x.write ? 'write' : ''} ${x.method === 'held' ? 'held' : ''} ${x.isError ? 'err' : ''}">
-          <span class="t">${time(x.at)}</span>
-          <span class="what"><span class="srv">${esc(x.server)}</span> <span class="m">${esc(x.method)}</span> ${x.tool ? `<span class="tool">${esc(x.tool)}</span>` : ''}</span>
-          <span class="sub">${esc([compactArgs(x.args), x.summary].filter(Boolean).join(' → '))}${x.method === 'tools/call' || x.method === 'tools/list' ? ` · ${x.ms} ms` : ''}</span>
-        </li>`,
-      )
-      .join('')}</ul>`;
-}
-
-function setTab(tab) {
-  state.tab = tab;
-  $$('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === tab)));
-  $('#sources').hidden = tab !== 'sources';
-  $('#activity').hidden = tab !== 'activity';
-}
-
-function renderAll() {
-  renderTopbar();
-  renderRail();
-  renderIntro();
-  renderResult();
-  renderSources();
-  renderActivity();
-}
-
-// ---------- asking ----------
-async function ask(question) {
-  const q = question.trim();
-  if (!q || state.run?.running) return;
-  state.editing = null;
-  state.run = { question: q, mode: state.status.mode, model: state.status.planners.claude.model, steps: [], answer: null, error: null, running: true, revealed: false, traceOpen: false };
-  $('#q').value = '';
-  autosize();
-  setBusy(true);
-  renderResult();
-  renderSources();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-
-  const run = state.run;
+async function loadActivity() {
   try {
-    const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) });
-    if (!res.ok || !res.body) throw new Error((await res.json().catch(() => ({}))).error || `Request failed (${res.status})`);
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let cut;
-      while ((cut = buffer.indexOf('\n\n')) >= 0) {
-        const chunk = buffer.slice(0, cut);
-        buffer = buffer.slice(cut + 2);
-        const event = chunk.match(/^event: (.+)$/m)?.[1];
-        const data = JSON.parse(chunk.match(/^data: (.+)$/m)?.[1] ?? 'null');
-        onEvent(run, event, data);
-      }
-    }
-  } catch (err) {
-    run.error = { message: err.message, hint: '' };
-  }
-  run.running = false;
-  setBusy(false);
-  if (state.run === run) {
-    renderResult();
-    renderSources();
-    refreshActivity();
-  }
+    const r = await api('/api/activity');
+    if (r.ok) S.activity = r.data.activity ?? [];
+  } catch { /* the activity tab keeps what it had */ }
+  renderActivity();
 }
 
-function onEvent(run, event, data) {
-  if (state.run !== run) return;
-  if (event === 'run') Object.assign(run, { mode: data.mode, model: data.model ?? run.model });
-  if (event === 'step') {
-    const i = run.steps.findIndex((s) => s.id === data.id);
-    if (i >= 0) run.steps[i] = data;
-    else run.steps.push({ ...data, isNew: true });
+/* ---------- Top bar ---------- */
+function renderBar() {
+  $('#today').textContent = S.status?.todayLabel ?? '';
+  const planner = $('#planner');
+  planner.replaceChildren();
+  if (!S.status) return;
+  const { mode, planners } = S.status;
+  const options = [
+    { id: 'claude', label: 'Claude', disabled: !planners.claude.credentials, why: 'No Anthropic API key found. Set ANTHROPIC_API_KEY and restart the server.' },
+    { id: 'offline', label: 'Offline', disabled: false },
+  ];
+  for (const o of options) {
+    const checked = o.id === mode;
+    planner.append(el('button', {
+      type: 'button', role: 'radio', 'aria-checked': String(checked), tabindex: checked ? '0' : '-1',
+      disabled: S.busy || (o.disabled && !checked), title: o.disabled ? o.why : `Plan with ${o.label}`, 'data-mode': o.id,
+      onclick: () => setMode(o.id),
+      onkeydown: (e) => {
+        if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+        const other = options.find((x) => x.id !== o.id);
+        if (!other.disabled) { setMode(other.id); requestAnimationFrame(() => $(`#planner [data-mode="${other.id}"]`)?.focus()); }
+      },
+    }, o.label));
+    if (o.id === 'offline') planner.lastChild.title = 'Offline script: real MCP calls, hand-written reasoning for the two example questions';
   }
-  if (event === 'answer') run.answer = data;
-  if (event === 'error') run.error = data;
-  if (event === 'done') run.ms = data.ms;
-  if (event === 'answer' || event === 'step' || event === 'error') renderResult();
+}
+async function setMode(mode) {
+  if (!S.status || S.status.mode === mode || S.busy) return;
+  const r = await api('/api/mode', { mode });
+  if (!r.ok) return toast(r.data.error ?? "Couldn't switch the planner.");
+  S.status = r.data;
+  renderBar();
+  renderAsk();
+}
+
+function renderReset(confirming = false) {
+  const box = $('#reset');
+  box.replaceChildren();
+  if (!confirming) {
+    box.append(el('button', { class: 'btn btn-quiet btn-sm', type: 'button', disabled: S.busy || S.offline, onclick: () => { renderReset(true); $('#reset [data-confirm]')?.focus(); } },
+      icon('i-replay'), el('span', { text: 'Reset demo' })));
+    return;
+  }
+  box.append(
+    el('span', { class: 'reset-q', text: 'Restore the sample data?' }),
+    el('button', { class: 'btn btn-primary btn-sm', type: 'button', 'data-confirm': true, onclick: doReset }, 'Reset'),
+    el('button', { class: 'btn btn-link btn-sm', type: 'button', onclick: () => renderReset(false) }, 'Cancel'),
+  );
+}
+async function doReset() {
+  const box = $('#reset');
+  box.replaceChildren(spinner(), el('span', { class: 'reset-q', text: 'Restarting the MCP servers' }));
+  const r = await api('/api/reset', {});
+  if (r.ok) {
+    S.status = r.data;
+    S.run = null;
+    S.editing.clear();
+  } else toast(r.data.error ?? "Couldn't reset the demo.");
+  renderAll();
+  loadActivity();
+}
+
+/* ---------- Ask ---------- */
+function renderAsk() {
+  const hour = S.status?.hour ?? new Date().getHours();
+  $('#greeting').textContent = hour < 12 ? 'Good morning.' : hour < 18 ? 'Good afternoon.' : 'Good evening.';
+  const suggest = $('#suggest');
+  suggest.replaceChildren();
+  const main = $('#main');
+  main.querySelector('.notice[data-offline]')?.remove();
+  if (S.offline) {
+    $('#ask-sub').textContent = 'Weave reads only what a question needs, cites every record, and holds changes for your OK.';
+    $('.ask').append(el('div', { class: 'notice', 'data-offline': true, role: 'alert' },
+      icon('i-alert'),
+      el('div', {},
+        el('strong', { text: "Can't reach the Weave server." }),
+        el('p', { text: 'Start it from the project folder with npm start, then try again.' }),
+        el('button', { class: 'btn btn-quiet btn-sm', type: 'button', onclick: loadStatus }, 'Try again'))));
+    setBusy(false);
+    return;
+  }
+  if (!S.status) { setBusy(S.busy); return; } // still loading: the controls wait for the server
+  for (const q of S.status.suggestions ?? []) {
+    suggest.append(el('button', { type: 'button', disabled: S.busy, title: q, 'aria-label': `Ask: ${q}`, onclick: () => { $('#q').value = q; autosize(); ask(q); } }, SHORT[q] ?? q));
+  }
+  const offline = S.status.mode === 'offline';
+  const canClaude = S.status.planners.claude.credentials;
+  $('#ask-sub').textContent = offline
+    ? `The offline planner answers the two example questions below with real MCP calls on sample data.${canClaude ? ' Switch to Claude to ask anything.' : ' Add an Anthropic API key to ask anything.'}`
+    : `Claude plans which MCP tools to call, cites every record it reads, and holds changes for your OK.`;
+  setBusy(S.busy);
 }
 
 function setBusy(busy) {
-  $('#askBtn').disabled = busy;
-  $('#q').placeholder = busy ? 'Working on it…' : state.run ? 'Ask another question…' : 'Ask about your day, your plans or your spending…';
+  S.busy = busy;
+  const btn = $('#ask-btn');
+  btn.disabled = busy || S.offline || !S.status;
+  btn.replaceChildren(...(busy ? [spinner(), el('span', { text: 'Asking' })] : [el('span', { text: 'Ask' }), icon('i-enter')]));
+  $('#q').disabled = busy || S.offline || !S.status;
+  document.querySelectorAll('#suggest button').forEach((b) => { b.disabled = busy; });
+  document.querySelectorAll('.switch').forEach((b) => { if (!b.dataset.broken) b.disabled = busy; });
+  renderBar();
+  $('#run').setAttribute('aria-busy', String(busy));
+  if (!$('#reset [data-confirm]')) renderReset(false);
 }
 
 function autosize() {
-  const t = $('#q');
-  t.style.height = 'auto';
-  t.style.height = `${Math.min(t.scrollHeight, 180)}px`;
+  const q = $('#q');
+  q.style.height = 'auto';
+  q.style.height = `${Math.min(q.scrollHeight, 200)}px`;
 }
 
-// ---------- drafts ----------
-function findProposal(id) {
-  return state.run?.answer?.proposals.find((p) => p.id === id);
-}
-
-async function decide(id, action, changes) {
-  const p = findProposal(id);
-  if (!p) return;
-  state.busy.add(id);
-  renderResult();
+async function ask(question) {
+  question = question.trim();
+  if (!question || S.busy || S.offline) return;
+  S.run = { question, steps: [], proposals: new Map(), answer: null, error: null, done: false };
+  S.editing.clear();
+  S.edits.clear();
+  setBusy(true);
+  renderRun();
+  renderSources();
+  $('#run').scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   try {
-    const { proposal, error } = await api(`/api/proposals/${id}/${action}`, action === 'approve' ? { changes } : {});
-    if (proposal) Object.assign(p, proposal);
-    if (error) toast(error);
-    else if (action === 'approve') toast(p.status === 'done' ? `Added to ${p.app}.` : `${p.app} didn't confirm this change.`);
+    const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+    if (!res.ok || !res.body) {
+      const j = await res.json().catch(() => ({}));
+      throw Object.assign(new Error(j.error ?? `The server answered ${res.status}.`), { known: true });
+    }
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let cut;
+      while ((cut = buf.indexOf('\n\n')) >= 0) {
+        onEvent(buf.slice(0, cut));
+        buf = buf.slice(cut + 2);
+      }
+    }
   } catch (err) {
-    toast(err.message);
+    S.run.error = err.known ? { message: err.message, hint: '' } : { message: 'The connection to the Weave server dropped.', hint: 'Check that the server is still running, then ask again.' };
   }
-  state.busy.delete(id);
-  state.editing = null;
-  renderResult();
-  refreshActivity();
+  S.run.done = true;
+  setBusy(false);
+  renderRun();
+  renderSources();
+  await loadActivity();
+  if (S.run.answer) selectTab('sources');
 }
 
-// ---------- highlight links between answer and sources ----------
-function highlight(sourceId, on, scroll) {
-  $$(`[data-src="${CSS.escape(sourceId)}"]`).forEach((el) => el.classList.toggle('hot', on));
-  if (on && scroll) {
-    const card = $(`.src[data-src="${CSS.escape(sourceId)}"]`);
-    if (card) {
-      card.closest('details')?.setAttribute('open', '');
-      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
+let frame = 0;
+function onEvent(block) {
+  let event = 'message', data = '';
+  for (const line of block.split('\n')) {
+    if (line.startsWith('event: ')) event = line.slice(7);
+    else if (line.startsWith('data: ')) data += line.slice(6);
   }
+  let payload;
+  try { payload = JSON.parse(data); } catch { return; }
+  const run = S.run;
+  if (event === 'run') Object.assign(run, { id: payload.id, mode: payload.mode, model: payload.model });
+  else if (event === 'step') {
+    const i = run.steps.findIndex((s) => s.id === payload.id);
+    if (i >= 0) run.steps[i] = payload; else run.steps.push(payload);
+  } else if (event === 'proposal') run.proposals.set(payload.id, payload);
+  else if (event === 'answer') {
+    run.answer = payload;
+    for (const p of payload.proposals ?? []) run.proposals.set(p.id, { ...run.proposals.get(p.id), ...p });
+  } else if (event === 'error') run.error = payload;
+  else if (event === 'done') run.ms = payload.ms;
+  if (!frame) frame = requestAnimationFrame(() => { frame = 0; renderRun(); });
 }
 
-// ---------- events ----------
-function bind() {
-  $('#composer').addEventListener('submit', (e) => {
-    e.preventDefault();
-    ask($('#q').value);
-  });
-  $('#q').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-      e.preventDefault();
-      ask($('#q').value);
-    }
-  });
-  $('#q').addEventListener('input', autosize);
-  document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      $('#q').focus();
-    }
-    if (e.key === 'Escape' && state.editing) {
-      state.editing = null;
-      renderResult();
-    }
-  });
+/* ---------- The run ---------- */
+function sourceByN(n) { return S.run?.answer?.sources.find((s) => s.n === n); }
+function nFor(sourceId) { return S.run?.answer?.sources.find((s) => s.source_id === sourceId)?.n ?? null; }
 
-  document.addEventListener('click', async (e) => {
-    const el = e.target.closest('button, [data-action]');
-    if (!el) return;
-    if (el.matches('.suggestion')) return ask(el.dataset.q);
-    if (el.matches('.cite')) {
-      setTab('sources');
-      highlight(el.dataset.src, true, true);
-      const card = $(`.src[data-src="${CSS.escape(el.dataset.src)}"]`);
-      card?.classList.remove('flash');
-      void card?.offsetWidth;
-      card?.classList.add('flash');
-      return;
-    }
-    if (el.matches('.tab')) return setTab(el.dataset.tab);
-    if (el.dataset.mode && !el.disabled) {
-      state.status = await api('/api/mode', { mode: el.dataset.mode });
-      renderTopbar();
-      return toast(el.dataset.mode === 'claude' ? 'Claude will choose which MCP tools to call.' : 'Offline script: same MCP calls, fixed plan, two demo questions.');
-    }
-    if (el.id === 'reset') {
-      el.disabled = true;
-      state.status = await api('/api/reset', {});
-      state.run = null;
-      el.disabled = false;
-      renderAll();
-      refreshActivity();
-      return toast('Demo reset: sample apps restarted with fresh data.');
-    }
-    const action = el.dataset.action;
-    const appId = el.closest('[data-app]')?.dataset.app;
-    if (action === 'expand' && appId) {
-      state.open.has(appId) ? state.open.delete(appId) : state.open.add(appId);
-      return renderRail();
-    }
-    if (action === 'toggle' && appId) {
-      const on = el.getAttribute('aria-checked') !== 'true';
-      state.status = await api(`/api/apps/${appId}`, { enabled: on });
-      renderRail();
-      const name = state.status.apps.find((a) => a.id === appId)?.name;
-      return toast(on ? `${name} is on.` : `${name} is off. Weave won't read or change it.`);
-    }
-    if (action === 'clear') {
-      state.run = null;
-      renderResult();
-      renderSources();
-      setBusy(false);
-      return $('#q').focus();
-    }
-    const pid = el.closest('[data-proposal]')?.dataset.proposal;
-    if (!pid) return;
-    if (action === 'approve') return decide(pid, 'approve', {});
-    if (action === 'dismiss') return decide(pid, 'dismiss');
-    if (action === 'edit') {
-      state.editing = pid;
-      renderResult();
-      return $(`[data-proposal="${CSS.escape(pid)}"] input`)?.focus();
-    }
-    if (action === 'cancel-edit') {
-      state.editing = null;
-      return renderResult();
-    }
-    if (action === 'approve-edited') {
-      const card = el.closest('[data-proposal]');
-      const changes = Object.fromEntries($$('input', card).map((i) => [i.name, i.value]));
-      return decide(pid, 'approve', changes);
-    }
-  });
-
-  document.addEventListener('mouseover', (e) => {
-    const t = e.target.closest('.cite, .src');
-    if (t) highlight(t.dataset.src, true, t.matches('.cite') && state.tab === 'sources');
-  });
-  document.addEventListener('mouseout', (e) => {
-    const t = e.target.closest('.cite, .src');
-    if (t) highlight(t.dataset.src, false);
-  });
+function citeButton(n) {
+  const src = sourceByN(n);
+  if (!src) return null;
+  const { title } = describeRecord(src.record);
+  return el('button', {
+    class: 'cite', type: 'button', 'data-n': n, 'data-yarn': YARN[src.server] ?? src.server,
+    'aria-label': `Source ${n}: ${src.app}, ${title}`,
+    onclick: () => openSource(n), onmouseenter: () => light(n), onmouseleave: () => light(null), onfocus: () => light(n), onblur: () => light(null),
+  }, String(n));
 }
 
-async function init() {
-  $$('[data-icon]').forEach((el) => (el.innerHTML = icons[el.dataset.icon] ?? ''));
-  try {
-    state.status = await api('/api/status');
-  } catch (err) {
-    document.body.innerHTML = `<p style="padding:40px;font:16px/1.5 sans-serif">Couldn't reach the Weave server: ${esc(err.message)}</p>`;
+function heldProposals() {
+  // Held steps arrive in the same order as the drafts they stand for.
+  const drafts = [...(S.run?.proposals.values() ?? [])];
+  let k = 0;
+  return S.run.steps.map((s) => (s.kind === 'write' ? drafts[k++] : null));
+}
+
+function renderRun() {
+  const box = $('#run');
+  const run = S.run;
+  if (!run) { box.hidden = true; box.replaceChildren(); return; }
+  box.hidden = false;
+  const drafts = heldProposals();
+
+  const picks = el('ol', { class: 'picks', 'aria-label': 'MCP calls in this run' }, run.steps.map((s, i) => {
+    const d = drafts[i];
+    let state = s.status === 'running' ? 'is-running' : s.status === 'error' ? 'is-error' : s.kind === 'write' ? 'is-held' : '';
+    if (d?.status === 'done' || d?.status === 'unverified') state = '';
+    if (d?.status === 'dismissed' || d?.status === 'failed') state = 'is-held is-dropped';
+    const label = `${s.app} ${s.tool}: ${s.kind === 'write' ? (d?.status === 'done' ? 'approved and added' : d?.status === 'dismissed' ? 'dismissed' : 'held for your approval') : s.summary ?? s.status}`;
+    return el('li', { class: `pick ${state}`, 'data-yarn': YARN[s.server] ?? s.server, title: label, 'aria-label': label });
+  }));
+
+  const reads = run.steps.filter((s) => s.kind === 'read');
+  const pending = [...run.proposals.values()].filter((p) => p.status === 'pending').length;
+  let status;
+  if (!run.done) {
+    const last = run.steps.at(-1);
+    status = [spinner(), el('span', { text: last ? `${last.kind === 'write' ? 'Drafting a change in' : 'Reading'} ${last.app}` : 'Planning which apps to read' })];
+  } else if (run.error && !run.answer) status = [el('span', { text: 'Stopped before an answer.' })];
+  else {
+    const apps = [...new Set(reads.filter((s) => s.status === 'done').map((s) => s.app))];
+    status = [el('span', { text: `Woven from ${plural(reads.length, 'read')}${apps.length ? ` across ${listJoin(apps)}` : ''}.${pending ? ` ${pending === 1 ? 'One change waits' : `${pending} changes wait`} for your OK.` : ''}` })];
+  }
+
+  const steps = el('ol', { class: 'steps' }, run.steps.map((s, i) => {
+    const d = drafts[i];
+    const held = s.kind === 'write';
+    let out = s.status === 'running' ? [spinner(), 'reading'] : s.status === 'error' ? ['failed'] : held ? [d?.status === 'done' ? 'approved, added' : d?.status === 'dismissed' ? 'dismissed' : d?.status === 'failed' ? 'failed' : 'held for approval'] : [s.summary ?? 'done', s.ms !== undefined ? `, ${s.ms} ms` : ''];
+    return el('li', { class: `step${held && (!d || d.status === 'pending') ? ' is-held' : ''}${s.status === 'error' ? ' is-error' : ''}` },
+      swatch(YARN[s.server] ?? s.server),
+      el('span', { class: 'step-app', text: s.app }),
+      el('span', { class: 'step-call' }, el('code', { text: s.tool }), ' ', el('span', { class: 'step-args', text: fmtArgs(s.args) })),
+      el('span', { class: 'step-out' }, out));
+  }));
+  const calls = el('details', { class: 'calls', open: run.callsOpen ?? !run.answer },
+    el('summary', { onclick: (e) => { run.callsOpen = !e.currentTarget.parentElement.open; } }, `MCP calls in this run (${run.steps.length})`), steps);
+
+  const parts = [
+    el('p', { class: 'run-q', text: run.question }),
+    el('div', { class: 'loomstrip' }, picks, el('p', { class: 'run-status', role: 'status' }, status)),
+    run.steps.length ? calls : null,
+  ];
+
+  if (run.error) {
+    parts.push(el('div', { class: 'notice run-error', role: 'alert' }, icon('i-alert'),
+      el('div', {}, el('strong', { text: run.error.message ?? 'Something went wrong.' }), run.error.hint ? el('p', { text: run.error.hint }) : null)));
+  }
+
+  if (run.answer) {
+    const a = run.answer;
+    const answer = el('div', { class: 'answer' }, el('h2', { class: 'answer-head', text: a.headline || 'Here is what I found.' }));
+    for (const sec of a.sections) {
+      answer.append(el('div', { class: 'answer-section' },
+        el('h3', { text: sec.title }),
+        el('ul', { class: 'items' }, sec.items.map((it) => el('li', { class: 'item' },
+          el('span', { class: 'item-text', text: it.text }),
+          it.detail ? el('span', { class: 'item-detail', text: it.detail }) : null,
+          el('span', { class: 'cites' }, it.sourceIds.map((id) => citeButton(nFor(id)))))))));
+    }
+    if (a.caveats.length) answer.append(el('div', { class: 'caveats' }, a.caveats.map((c) => el('p', {}, icon('i-alert'), el('span', { text: c })))));
+    const st = a.stats;
+    answer.append(el('p', { class: 'stats', text: `${plural(st.reads, 'MCP read')} in ${st.ms} ms. Planner: ${st.mode === 'claude' ? `Claude (${st.model})` : 'offline script'}.` }));
+    parts.push(answer);
+  }
+
+  const props = [...run.proposals.values()];
+  if (props.length && (run.answer || run.done)) parts.push(renderDrafts(props));
+
+  const focusId = document.activeElement?.id;
+  box.replaceChildren(...parts.filter(Boolean));
+  if (focusId && document.getElementById(focusId)) document.getElementById(focusId).focus();
+}
+
+/* ---------- Drafts ---------- */
+function renderDrafts(props) {
+  const pending = props.filter((p) => p.status === 'pending').length;
+  return el('div', { class: 'drafts' },
+    el('h3', {}, 'Changes Weave drafted'),
+    el('p', { class: 'drafts-sub', text: pending ? 'Nothing below has happened yet. Each one runs only if you approve it.' : 'Every draft has been decided.' }),
+    props.map(renderDraft));
+}
+
+function renderDraft(p) {
+  const yarn = YARN[p.server] ?? p.server;
+  const editing = S.editing.has(p.id) && p.status === 'pending';
+  const args = p.args ?? {};
+  const meta = p.tool === 'create_event'
+    ? [['Date', fmtDate(args.date)], ['Time', `${args.start} to ${args.end}`], args.notes && ['Notes', args.notes]]
+    : [['Due', args.due ? fmtDate(args.due) : 'No date'], args.list && ['List', args.list]];
+  const card = el('article', { class: `draft${p.status === 'done' || p.status === 'unverified' ? ' is-done' : ''}${p.status === 'dismissed' ? ' is-dismissed' : ''}`, 'data-yarn': yarn, 'aria-label': `Draft: ${p.toolTitle} in ${p.app}` },
+    el('p', { class: 'draft-head' }, swatch(yarn), `${p.toolTitle} in ${p.app}`),
+    el('p', { class: 'draft-title', text: args.title }),
+    el('dl', { class: 'draft-meta' }, meta.filter(Boolean).map(([k, v]) => el('div', {}, el('dt', { text: k }), el('dd', { text: v })))),
+    p.why ? el('p', { class: 'draft-why' }, p.why, ...(p.sourceIds ?? []).map((id) => citeButton(nFor(id)))) : null);
+
+  if (editing) {
+    const fields = (EDITABLE[p.tool] ?? []).map(([key, type, label], i) => el('div', { class: `field${key === 'title' ? ' field-wide' : ''}` },
+      el('label', { for: `edit-${p.id}-${key}`, text: label }),
+      el('input', { id: `edit-${p.id}-${key}`, name: key, type, value: S.edits.get(p.id)?.[key] ?? args[key] ?? '', required: key === 'title', autocomplete: 'off', oninput: (e) => S.edits.set(p.id, { ...S.edits.get(p.id), [key]: e.target.value }) })));
+    const form = el('form', { class: 'draft-edit', onsubmit: (e) => { e.preventDefault(); const changes = Object.fromEntries(new FormData(e.currentTarget)); approve(p, changes); } },
+      fields,
+      el('div', { class: 'draft-actions field-wide' },
+        el('button', { class: 'btn btn-primary', type: 'submit' }, icon('i-check'), 'Approve with changes'),
+        el('button', { class: 'btn btn-link', type: 'button', onclick: () => { S.editing.delete(p.id); S.edits.delete(p.id); renderRun(); $(`#approve-${p.id}`)?.focus(); } }, 'Cancel')));
+    card.append(form);
+    return card;
+  }
+
+  if (p.status === 'pending') {
+    card.append(el('div', { class: 'draft-actions' },
+      el('button', { class: 'btn btn-primary', type: 'button', id: `approve-${p.id}`, onclick: () => approve(p) }, icon('i-check'), 'Approve'),
+      el('button', { class: 'btn btn-quiet', type: 'button', onclick: () => { S.editing.add(p.id); renderRun(); requestAnimationFrame(() => document.querySelector(`#edit-${p.id}-title`)?.focus()); } }, icon('i-pencil'), 'Edit first'),
+      el('button', { class: 'btn btn-link', type: 'button', onclick: () => dismiss(p) }, 'Dismiss')));
+  } else if (p.status === 'running') {
+    card.append(el('p', { class: 'draft-result is-muted' }, spinner(), `Adding to ${p.app}, then reading it back to confirm`));
+  } else if (p.status === 'done') {
+    const conflicts = (p.conflicts ?? []).map((c) => `“${c.title}” (${c.start} to ${c.end})`);
+    card.append(el('p', { class: 'draft-result is-ok', role: 'status' }, icon('i-check'),
+      el('span', {}, `Added to ${p.app} and read back to confirm.${conflicts.length ? ` It overlaps ${listJoin(conflicts)}.` : ''}`)));
+  } else if (p.status === 'unverified') {
+    card.append(el('p', { class: 'draft-result is-warn', role: 'status' }, icon('i-alert'), el('span', { text: `${p.app} accepted it, but Weave couldn't read it back. Check ${p.app} before relying on it.` })));
+  } else if (p.status === 'failed') {
+    card.append(el('p', { class: 'draft-result is-bad', role: 'alert' }, icon('i-alert'), el('span', { text: `${p.app} refused it: ${p.error ?? 'no reason given.'} Nothing was changed.` })));
+  } else if (p.status === 'dismissed') {
+    card.append(el('p', { class: 'draft-result is-muted', role: 'status' }, icon('i-x'), el('span', { text: 'Dismissed. Nothing was changed.' })));
+  }
+  return card;
+}
+
+async function approve(p, changes = {}) {
+  S.editing.delete(p.id);
+  S.edits.delete(p.id);
+  p.status = 'running';
+  renderRun();
+  const r = await api(`/api/proposals/${encodeURIComponent(p.id)}/approve`, { changes });
+  if (r.data.proposal) Object.assign(p, r.data.proposal);
+  else { p.status = 'pending'; toast(r.data.error ?? "Couldn't approve that draft."); }
+  if (r.status === 409 && r.data.error) toast(r.data.error);
+  renderRun();
+  loadActivity();
+}
+async function dismiss(p) {
+  const r = await api(`/api/proposals/${encodeURIComponent(p.id)}/dismiss`, {});
+  if (r.data.proposal) Object.assign(p, r.data.proposal);
+  else toast(r.data.error ?? "Couldn't dismiss that draft.");
+  renderRun();
+}
+
+/* ---------- Inspector ---------- */
+const TABS = ['apps', 'sources', 'activity'];
+function selectTab(name, focus = false) {
+  if (!TABS.includes(name)) name = 'apps';
+  S.tab = name;
+  for (const t of TABS) {
+    const tab = $(`#tab-${t}`);
+    const on = t === name;
+    tab.setAttribute('aria-selected', String(on));
+    tab.tabIndex = on ? 0 : -1;
+    $(`#panel-${t}`).hidden = !on;
+  }
+  if (focus) $(`#tab-${name}`).focus();
+  const url = new URL(location.href);
+  url.searchParams.set('tab', name);
+  history.replaceState(null, '', url);
+}
+
+function renderApps() {
+  const panel = $('#panel-apps');
+  if (S.offline) {
+    panel.replaceChildren(el('div', { class: 'empty' }, el('strong', { text: 'No apps to show' }), 'The Weave server is not running, so no MCP servers are connected.'));
     return;
   }
-  renderAll();
-  bind();
-  refreshActivity();
-  $('#q').focus();
+  if (!S.status) { panel.replaceChildren(...[1, 2, 3, 4].map(() => el('div', { class: 'skeleton', 'aria-hidden': 'true' })), el('p', { class: 'panel-note', text: 'Connecting to the MCP servers' })); return; }
+  const open = new Set([...panel.querySelectorAll('details[open]')].map((d) => d.dataset.app));
+  const apps = el('ul', { class: 'apps' }, S.status.apps.map((a) => {
+    const on = a.enabled && a.status === 'connected';
+    const broken = a.status !== 'connected';
+    const reads = a.tools.filter((t) => t.readOnly).length;
+    const line = broken ? `Couldn't connect: ${a.error ?? a.status}` : a.enabled ? `${a.blurb}. ${plural(a.tools.length, 'tool')}, sample data.` : 'Switched off. Weave will not read it.';
+    return el('li', { class: `app${on ? '' : ' is-off'}`, 'data-yarn': YARN[a.id] ?? a.id },
+      el('div', { class: 'app-row' },
+        swatch(YARN[a.id] ?? a.id),
+        el('div', {}, el('div', { class: 'app-name', text: a.name }), el('div', { class: 'app-blurb', text: line })),
+        el('button', { class: 'switch', type: 'button', role: 'switch', 'aria-checked': String(a.enabled), 'aria-label': `Let Weave use ${a.name}`, disabled: broken || S.busy, 'data-broken': broken ? 'true' : null, onclick: () => toggleApp(a) })),
+      a.tools.length ? el('details', { 'data-app': a.id, open: open.has(a.id) },
+        el('summary', {}, `${plural(a.tools.length, 'tool')}: ${reads} read, ${a.tools.length - reads} ask first`),
+        el('ul', { class: 'tools' }, a.tools.map((t) => el('li', {}, el('code', { text: t.name, title: t.description }), el('span', { class: `tool-kind${t.readOnly ? '' : ' is-write'}`, text: t.readOnly ? 'reads' : 'asks first' }))))) : null);
+  }));
+  panel.replaceChildren(
+    el('h2', { text: 'Connected through MCP' }),
+    el('p', { class: 'panel-note', text: 'Switch an app off and Weave stops reading it. Tools that change data always ask first.' }),
+    apps,
+    el('h2', { text: 'Planned, not connected' }),
+    el('ul', { class: 'planned' }, (S.status.planned ?? []).map((p) => el('li', {}, swatch(p.id), el('span', {}, el('span', { text: p.name }), el('br'), el('span', { text: p.blurb }))))));
+}
+async function toggleApp(a) {
+  const r = await api(`/api/apps/${encodeURIComponent(a.id)}`, { enabled: !a.enabled });
+  if (!r.ok) return toast(r.data.error ?? `Couldn't switch ${a.name}.`);
+  S.status = r.data;
+  renderApps();
+  $(`.app[data-yarn="${YARN[a.id] ?? a.id}"] .switch`)?.focus();
 }
 
-init();
+function renderSources() {
+  const panel = $('#panel-sources');
+  const count = $('#count-sources');
+  const a = S.run?.answer;
+  if (!a) {
+    count.textContent = '';
+    if (S.busy) { panel.replaceChildren(...[1, 2, 3].map(() => el('div', { class: 'skeleton', 'aria-hidden': 'true' })), el('p', { class: 'panel-note', text: 'Records appear here once the answer is ready.' })); return; }
+    panel.replaceChildren(el('div', { class: 'empty' }, el('strong', { text: 'No sources yet' }), 'Every record Weave reads lands here, numbered when the answer cites it.'));
+    return;
+  }
+  const cited = a.sources.filter((s) => s.n);
+  const rest = a.sources.filter((s) => !s.n);
+  count.textContent = String(cited.length);
+  const card = (s) => {
+    const r = describeRecord(s.record);
+    return el('li', { class: 'source', id: s.n ? `src-${s.n}` : null, tabindex: s.n ? '-1' : null, 'data-yarn': YARN[s.server] ?? s.server, 'data-n': s.n ?? null },
+      el('span', { class: 'source-n', text: s.n ? String(s.n) : '' }),
+      el('span', { class: 'source-app' }, icon(ICON[s.server] ?? 'i-plug'), s.app),
+      el('span', { class: 'source-title', text: r.title }),
+      r.meta ? el('span', { class: 'source-meta', text: r.meta }) : null,
+      r.snippet ? el('span', { class: 'source-snippet', text: r.snippet }) : null);
+  };
+  panel.replaceChildren(
+    el('h2', { text: cited.length ? 'Cited in the answer' : 'Read for this answer' }),
+    cited.length ? el('ol', { class: 'sources' }, cited.map(card)) : el('p', { class: 'panel-note', text: 'The answer cites no records.' }),
+    rest.length ? el('details', { class: 'uncited' }, el('summary', {}, `Also read, not cited (${rest.length})`), el('ul', { class: 'sources' }, rest.map(card))) : null);
+}
+
+function light(n) {
+  document.querySelectorAll('.is-lit').forEach((x) => x.classList.remove('is-lit'));
+  if (!n) return;
+  document.querySelectorAll(`.cite[data-n="${n}"]`).forEach((c) => c.classList.add('is-lit'));
+  const card = $(`#src-${n}`);
+  if (!card) return;
+  card.classList.add('is-lit');
+  if (S.tab === 'sources' && matchMedia('(min-width: 64.01rem)').matches) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+function openSource(n) {
+  selectTab('sources');
+  const card = $(`#src-${n}`);
+  if (!card) return;
+  card.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  card.focus({ preventScroll: true });
+  light(n);
+}
+
+function renderActivity() {
+  const panel = $('#panel-activity');
+  const items = [...S.activity].reverse();
+  $('#count-activity').textContent = items.length ? String(items.length) : '';
+  if (S.offline) { panel.replaceChildren(el('div', { class: 'empty' }, el('strong', { text: 'No activity' }), 'Start the Weave server to see its MCP messages.')); return; }
+  if (!items.length) { panel.replaceChildren(el('div', { class: 'empty' }, el('strong', { text: 'No MCP calls yet' }), 'Ask a question and every tools/call appears here.')); return; }
+  panel.replaceChildren(
+    el('p', { class: 'panel-note', text: 'Every MCP message between Weave and your apps, newest first.' }),
+    el('ol', { class: 'log' }, items.map((x) => {
+      const flags = [];
+      if (x.method === 'held') flags.push(el('span', { class: 'log-flag is-held', text: 'held for approval' }));
+      else if (x.summary === 'approved by you') flags.push(el('span', { class: 'log-flag', text: 'approved by you' }));
+      else if (x.summary === 'read back to confirm') flags.push(el('span', { class: 'log-flag', text: 'read back' }));
+      if (x.isError) flags.push(el('span', { class: 'log-flag is-error', text: 'error' }));
+      const app = S.status?.apps.find((a) => a.id === x.server)?.name ?? x.server;
+      return el('li', {},
+        swatch(YARN[x.server] ?? x.server),
+        el('span', { class: 'log-what' }, `${app} `, x.tool ? el('code', { text: x.tool }) : el('span', { class: 'log-method', text: x.method }), x.tool ? el('span', { class: 'log-method', text: ` ${x.method === 'held' ? 'drafted' : x.method}` }) : null, flags),
+        el('span', { class: 'log-ms', text: x.method === 'held' ? clock(x.at) : `${x.ms} ms` }),
+        x.args && Object.keys(x.args).length ? el('span', { class: 'log-args', text: fmtArgs(x.args) }) : null);
+    })));
+}
+
+function renderAll() {
+  renderBar();
+  renderReset(false);
+  renderAsk();
+  renderApps();
+  renderRun();
+  renderSources();
+  renderActivity();
+}
+
+/* ---------- Wiring ---------- */
+$('#composer').addEventListener('submit', (e) => { e.preventDefault(); ask($('#q').value); });
+$('#q').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask($('#q').value); }
+});
+$('#q').addEventListener('input', autosize);
+document.querySelectorAll('.tab').forEach((tab) => {
+  tab.addEventListener('click', () => selectTab(tab.dataset.tab));
+  tab.addEventListener('keydown', (e) => {
+    const i = TABS.indexOf(tab.dataset.tab);
+    if (e.key === 'ArrowRight') selectTab(TABS[(i + 1) % TABS.length], true);
+    else if (e.key === 'ArrowLeft') selectTab(TABS[(i + TABS.length - 1) % TABS.length], true);
+    else if (e.key === 'Home') selectTab(TABS[0], true);
+    else if (e.key === 'End') selectTab(TABS.at(-1), true);
+  });
+});
+
+selectTab(new URL(location.href).searchParams.get('tab') ?? 'apps');
+renderAll();
+loadStatus();

@@ -1,0 +1,290 @@
+[
+ {
+  "shape": "Everyday story: opening, word reveals, stitch spine, cloth finale",
+  "theme": "custom",
+  "axes": "light/grotesk-sans/chromatic-red",
+  "hero": "pinned untangle chapter with 3D card depth, word-by-word headline",
+  "nav": "lockup, four plain links, outlined action, plus a stitch progress spine in the left gutter",
+  "footer": "lockup, two notes, links on black",
+  "imagery": "none; once-per-session opening of five yarn threads around the logo parting as a woven curtain; a live cloth simulation in the finale that ripples under the pointer and pulses in each app colour as Weave reads it",
+  "photos": [],
+  "entry": "frontend/index.html",
+  "fingerprint": "threads draw in and part like a curtain; the finale is cloth that the pointer and the live answer move",
+  "sections": [
+   "opening",
+   "untangle hero",
+   "day instrument",
+   "try a question",
+   "control calendar",
+   "faq",
+   "ticker",
+   "live finale"
+  ],
+  "signature": "the tangle of a day pulled into one answer while you scroll",
+  "waived": [
+   "7b",
+   "84",
+   "80",
+   "81",
+   "77",
+   "59",
+   "79"
+  ],
+  "prompt": "Add more visuals and animation to make the site look a million dollars; no restriction",
+  "date": "2026-11-26",
+  "mode": "build"
+ },
+ {
+  "shape": "Everyday story: the day dial as a precise instrument",
+  "theme": "custom",
+  "axes": "light/grotesk-sans/chromatic-red",
+  "hero": "pinned untangle chapter",
+  "nav": "lockup, four plain links, outlined action",
+  "footer": "lockup, two notes, links on black",
+  "imagery": "none; day instrument: arc of the day with hour ticks, breathing sun, crescent moon, woven horizon, app threads with tags",
+  "photos": [],
+  "entry": "frontend/index.html",
+  "fingerprint": "sun on a measured arc, elapsed day drawn solid, apps as threads from a woven horizon",
+  "sections": [
+   "untangle hero",
+   "day instrument",
+   "try a question",
+   "control calendar",
+   "faq",
+   "ticker",
+   "live finale"
+  ],
+  "signature": "the sun travels the measured arc of your day while each moment raises its apps as threads",
+  "waived": [
+   "7b",
+   "84",
+   "80",
+   "81",
+   "77",
+   "59"
+  ],
+  "prompt": "Sky looks cartoonish; make it professional and aesthetic",
+  "date": "2026-11-26",
+  "mode": "build"
+ },
+ {
+  "shape": "Everyday story: the day dial becomes a woven world",
+  "theme": "custom",
+  "axes": "light/grotesk-sans/chromatic-red",
+  "hero": "pinned untangle chapter",
+  "nav": "lockup, four plain links, outlined action",
+  "footer": "lockup, two notes, links on black",
+  "imagery": "none; woven sky world: yarn-ball sun, twill hills, app balloons, stitched clouds, thread birds, cross-stitch stars, stitched moon",
+  "photos": [],
+  "entry": "frontend/index.html",
+  "fingerprint": "sky dial as a woven world with app balloons per moment",
+  "sections": [
+   "untangle hero",
+   "woven sky day",
+   "try a question",
+   "control calendar",
+   "faq",
+   "ticker",
+   "live finale"
+  ],
+  "signature": "each moment of the day lifts its apps into the sky as woven balloons",
+  "waived": [
+   "7b",
+   "84",
+   "80",
+   "81",
+   "77",
+   "59"
+  ],
+  "prompt": "Make the sky card visually crazy with animations",
+  "date": "2026-11-26",
+  "mode": "build"
+ },
+ {
+  "shape": "Everyday story with a live finale",
+  "theme": "custom",
+  "axes": "light/grotesk-sans/chromatic-red",
+  "hero": "pinned untangle chapter",
+  "nav": "lockup, four plain links, outlined action",
+  "footer": "lockup, two notes, links on black",
+  "imagery": "none; app cards, sky dial with time scrubber, typing demo, press-able calendar, question ticker, live woven-field console",
+  "photos": [],
+  "entry": "frontend/index.html",
+  "fingerprint": "untangle hero / scrub-able sky / demo / calendar / ticker into live console on the real backend / woven curtain page transition",
+  "sections": [
+   "untangle hero",
+   "day with draggable sky",
+   "try a question",
+   "control calendar",
+   "faq",
+   "question ticker",
+   "live finale"
+  ],
+  "signature": "the finale answers on the real prototype while the cloth lights up in each app it reads",
+  "waived": [
+   "7b",
+   "84",
+   "80",
+   "81",
+   "77",
+   "59"
+  ],
+  "prompt": "More creativity: visuals, transitions, something crazy",
+  "date": "2026-11-26",
+  "mode": "build"
+ },
+ {
+  "shape": "Everyday story, a tangled day pulled into one answer",
+  "theme": "custom",
+  "axes": "light/grotesk-sans/chromatic-red",
+  "hero": "headline left; six noisy app cards and a tangled thread untangle into one answer as the hero is scrolled (pinned chapter, CSS scroll timeline)",
+  "nav": "lockup, four plain section links, outlined action",
+  "footer": "lockup, two notes, links on black",
+  "imagery": "none; app cards, a moving sky dial, a typing demo, a press-able calendar, a pointer-reactive woven field",
+  "photos": [],
+  "entry": "frontend/index.html",
+  "fingerprint": "pinned untangle hero / sky dial timeline / live question demo / press-able calendar / woven field close",
+  "sections": [
+   "untangle hero",
+   "day with sky dial",
+   "try a question demo",
+   "control with calendar",
+   "faq",
+   "woven field close"
+  ],
+  "signature": "the tangle of a day pulled into one answer while you scroll",
+  "waived": [
+   "7b",
+   "84",
+   "80",
+   "81",
+   "77"
+  ],
+  "prompt": "Make the everyday page more creative: visuals, transitions, something crazy",
+  "date": "2026-11-26",
+  "mode": "build"
+ },
+ {
+  "shape": "Everyday story: a day of small questions answered once",
+  "theme": "custom",
+  "axes": "light/grotesk-sans/chromatic-red",
+  "hero": "headline left, example conversation right that plays once",
+  "nav": "lockup, four plain section links, outlined action",
+  "footer": "lockup, two notes, links on black",
+  "imagery": "none; example conversation and confirmation from sample data",
+  "photos": [],
+  "entry": "frontend/index.html",
+  "fingerprint": "conversation hero / day timeline / before and after / plain FAQ",
+  "sections": [
+   "conversation hero",
+   "day timeline",
+   "before and after",
+   "what you can ask",
+   "you stay in charge",
+   "plain FAQ",
+   "closing"
+  ],
+  "signature": "the conversation that answers a whole day in one reply",
+  "waived": [
+   "7b",
+   "84"
+  ],
+  "prompt": "Everyday landing page for regular people, with a developer mode switch to the existing page",
+  "date": "2026-11-26",
+  "mode": "build"
+ },
+ {
+  "shape": "app screen",
+  "scope": "app",
+  "theme": "custom",
+  "axes": "light/grotesk-sans/chromatic-red",
+  "hero": "none (app)",
+  "nav": "top bar: lockup, prototype tag, date, planner switch, reset with inline confirm",
+  "footer": "none (app)",
+  "imagery": "none",
+  "photos": [],
+  "entry": "frontend/app.html",
+  "fingerprint": "question column + inspector tabs / Parkinsans heads + Inter UI / yarn data colours",
+  "sections": [
+   "composer",
+   "run loom strip",
+   "MCP calls",
+   "cited answer",
+   "drafts",
+   "inspector: apps, sources, activity"
+  ],
+  "signature": "the loom strip: one pick per MCP call in its app yarn, drafts hollow until approved",
+  "waived": [
+   "7b",
+   "72"
+  ],
+  "prompt": "Build the inside of the website: the Weave app on the real MCP backend",
+  "date": "2026-11-25",
+  "mode": "build"
+ },
+ {
+  "shape": "Weave draft: eight panels on point paper, one cloth woven in the hero",
+  "theme": "custom",
+  "axes": "light/grotesk-sans/chromatic-red",
+  "hero": "headline left; draft sheet right where five app buttons thread dyed yarns into a bird's-eye cloth ending in the answer",
+  "nav": "logo lockup left, four section links, outlined action, sticky on white",
+  "footer": "lockup, two notes, section links on black",
+  "imagery": "none; generated drawdown, citation loom, diagrams",
+  "photos": [],
+  "entry": "frontend/index.html",
+  "fingerprint": "white point paper / Parkinsans + Inter / five yarns, one black band",
+  "sections": [
+   "drawdown hero",
+   "tangle on point paper",
+   "sourced answer loom",
+   "steps on a thread",
+   "woven ribbons on black",
+   "MCP diagram",
+   "annotated draft",
+   "closing logo"
+  ],
+  "signature": "the hero cloth weaving itself pick by pick from the five app yarns",
+  "waived": [
+   "7b",
+   "80",
+   "47c",
+   "39b"
+  ],
+  "prompt": "Redesign: replace the blue AI-looking theme with something unique",
+  "date": "2026-11-25",
+  "mode": "build"
+ },
+ {
+  "shape": "Loom: eight panels with one thread pulled through",
+  "theme": "custom",
+  "axes": "dark/high-contrast-serif/chromatic-blue",
+  "hero": "headline top left, five app fragments around one answer card, threads braid into it",
+  "nav": "logo lockup left, four section links, outlined action",
+  "footer": "lockup, two notes, section links",
+  "imagery": "none; live SVG threads and illustrative fragments",
+  "photos": [],
+  "entry": "frontend/index.html",
+  "fingerprint": "night+paper bands / Gloock + Inter / thread diagrams",
+  "sections": [
+   "hero",
+   "tangle",
+   "sourced answer",
+   "steps on a thread",
+   "strands of life",
+   "MCP diagram",
+   "annotated draft",
+   "closing logo"
+  ],
+  "signature": "five lit threads braiding over and under into one answer card",
+  "waived": [
+   "29",
+   "47c",
+   "7b",
+   "80",
+   "47b"
+  ],
+  "prompt": "Weave landing page: MCP assistant connecting context across work and life",
+  "date": "2026-11-25",
+  "mode": "build"
+ }
+]

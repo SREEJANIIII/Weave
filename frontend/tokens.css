@@ -1,0 +1,115 @@
+/* Weave tokens: a weave draft. White point paper, black ink, five dyed yarns. Every colour and face resolves here. */
+
+@font-face {
+  font-family: "Parkinsans";
+  src: url("/fonts/parkinsans-latin-wght-normal.woff2") format("woff2");
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/geist-mono-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+/* Metric-matched fallbacks so the swap does not reflow the fold. */
+@font-face { font-family: "Parkinsans Fallback"; src: local("Arial"); size-adjust: 104%; ascent-override: 92%; descent-override: 24%; line-gap-override: 0%; }
+@font-face { font-family: "Inter Fallback"; src: local("Arial"); size-adjust: 107.1%; ascent-override: 90.5%; descent-override: 22.6%; line-gap-override: 0%; }
+
+:root {
+  /* Spacing */
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px; --space-3xl: 96px; --space-4xl: 144px;
+
+  /* Type */
+  --text-xs: 0.8125rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.1875rem; --text-xl: 1.5rem; --text-2xl: 1.953rem; --text-3xl: 2.441rem;
+  --text-display: clamp(2.9rem, 4.3vw + 0.8rem, 5.5rem);
+  --text-display-s: clamp(1.75rem, 2vw + 1rem, 3.1rem);
+  --text-section: clamp(2.2rem, 2.7vw + 1rem, 4rem);
+  --text-title: clamp(1.2rem, 0.6vw + 0.95rem, 1.5rem);
+  --text-strand: clamp(1.6rem, 1.9vw + 0.9rem, 2.9rem);
+  --text-lead: clamp(1.125rem, 0.35vw + 1rem, 1.3125rem);
+  --tracking-display: -0.035em;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in: cubic-bezier(0.7, 0, 0.84, 0); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms; --dur-short: 220ms; --dur-long: 420ms;
+
+  /* Canvas */
+  --container: 1440px; --gutter: 64px; --gap-columns: 32px; --section-gap-s: 120px; --section-gap: 160px; --section-gap-l: 200px;
+  --nav-height: 68px;
+  --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200; --z-sticky-nav: 300; --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
+
+  /* Paper: a white point-paper sheet */
+  --color-paper: oklch(98.8% 0.002 95);
+  --color-paper-2: oklch(95.5% 0.004 95);
+  --color-paper-3: oklch(99.4% 0.001 95);
+  --color-grid: oklch(93% 0.004 95);
+  --color-grid-major: oklch(88.5% 0.005 95);
+  --color-ink: oklch(19% 0.006 95);
+  --color-ink-2: oklch(42% 0.006 95);
+  --color-muted: oklch(50% 0.006 95);
+  --color-rule: oklch(88% 0.004 95);
+  --color-rule-strong: oklch(75% 0.006 95);
+  --color-edge: oklch(62% 0.006 95);
+
+  /* Night: the black of the logo, for the woven band and the close */
+  --color-night: oklch(17% 0.006 95);
+  --color-night-2: oklch(23% 0.006 95);
+  --color-night-3: oklch(29% 0.006 95);
+  --color-night-rule: oklch(33% 0.006 95);
+  --color-on-night: oklch(97% 0.003 95);
+  --color-on-night-2: oklch(82% 0.005 95);
+  --color-on-night-3: oklch(70% 0.006 95);
+
+  /* Actions are ink; vermilion is the one accent, for state and text signals */
+  --color-action: oklch(19% 0.006 95);
+  --color-action-hover: oklch(52% 0.19 33);
+  --color-accent: oklch(52% 0.19 33);
+  --color-accent-ink: oklch(98.8% 0.002 95);
+  --color-signal: oklch(52% 0.19 33);
+  --color-go: oklch(45% 0.1 145);
+  --color-focus: oklch(56% 0.2 33);
+  --color-focus-night: oklch(74% 0.15 70);
+
+  /* Yarns: one dyed thread per app */
+  --yarn-calendar: oklch(62% 0.2 33);
+  --yarn-notes: oklch(82% 0.16 82);
+  --yarn-tasks: oklch(19% 0.006 95);
+  --yarn-workout: oklch(55% 0.11 145);
+  --yarn-email: oklch(76% 0.11 5);
+  /* Deeper dyes where a thin line has to hold up on white */
+  --yarn-notes-deep: oklch(74% 0.16 75);
+  --yarn-email-deep: oklch(66% 0.13 5);
+  /* On the night bands the black yarn turns chalk */
+  --yarn-tasks-night: oklch(97% 0.003 95);
+
+  /* The logo is only ever pure white on dark or pure black on light (logo guidelines, section 4). */
+  --color-logo-on-dark: #ffffff;
+  --color-logo-on-light: #000000;
+
+  --color-error: oklch(52% 0.19 27); --color-success: oklch(45% 0.1 145);
+
+  /* Faces: Parkinsans for display; Inter for UI, as Logo/Weave-logo-kit/Weave-logo-guidelines.md specifies */
+  --font-display: "Parkinsans", "Parkinsans Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", "Inter Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, Menlo, monospace;
+  --font-outlier: var(--font-display);
+
+  /* Surfaces */
+  --radius-card: 14px; --radius-inner: 8px; --radius-chip: 6px; --radius-pill: 999px; --rule-hair: 1px;
+  --shadow-card: 0 1px 2px oklch(19% 0.006 95 / 0.06), 0 8px 24px -14px oklch(19% 0.006 95 / 0.18);
+  --shadow-thumb: 0 1px 2px oklch(19% 0.006 95 / 0.3);
+  --shadow-segment: 0 1px 2px oklch(19% 0.006 95 / 0.12);
+  --shadow-lift: 0 2px 4px oklch(19% 0.006 95 / 0.07), 0 18px 36px -18px oklch(19% 0.006 95 / 0.28);
+}
+
+@media (max-width: 60rem) { :root { --nav-height: 60px; } }
