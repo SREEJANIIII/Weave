@@ -1,18 +1,3 @@
-export const YARN = { calendar: 'calendar', notes: 'notes', tasks: 'tasks', money: 'money', wishlist: 'wishlist' };
-
-export const ICON = {
-  calendar: 'i-calendar',
-  notes: 'i-notes',
-  tasks: 'i-tasks',
-  money: 'i-money',
-  wishlist: 'i-heart',
-  email: 'i-mail',
-  fitness: 'i-fitness',
-  travel: 'i-plug',
-  learning: 'i-plug',
-  home: 'i-plug',
-};
-
 export const SHORT = {
   'What should I follow up on today, and when can I fit in a workout?': 'Follow-ups and a workout today',
   'How much did I spend on food last week, and what was happening on those days?': 'Food spending last week',
