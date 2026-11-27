@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,9 +8,12 @@ const backendDir = path.join(root, 'backend');
 const frontendDir = path.join(root, 'frontend');
 const nodemonBin = path.join(backendDir, 'node_modules', 'nodemon', 'bin', 'nodemon.js');
 const viteBin = path.join(frontendDir, 'node_modules', 'vite', 'bin', 'vite.js');
+const hasNodemon = fs.existsSync(nodemonBin);
 
 const children = [
-  spawn(process.execPath, [nodemonBin], {
+  spawn(process.execPath, hasNodemon
+    ? [nodemonBin]
+    : ['--watch', '--env-file-if-exists=.env', 'src/server.js'], {
     cwd: backendDir,
     stdio: 'inherit',
   }),
