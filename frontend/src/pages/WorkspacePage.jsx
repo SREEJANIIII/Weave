@@ -249,8 +249,8 @@ export function WorkspacePage({ routeView = null }) {
 
       // 1. Receipts, warranties and bills saved on this device.
       const intent = savedIntent(q, papers.saved);
-      const serverCanReadPapers = false;
-      if (intent.claims && (intent.matches.length || !serverCanReadPapers)) {
+      const nvidiaCanLook = conn.status?.mode === 'nvidia' && !conn.offline;
+      if (intent.claims && (intent.matches.length || !nvidiaCanLook)) {
         chats.addTurn({ seq, fresh: true, ...answerFromSaved(q, papers.saved, intent) });
         return;
       }
@@ -571,6 +571,12 @@ export function WorkspacePage({ routeView = null }) {
               onConnect={connect}
               onDisconnect={disconnect}
               onRetry={conn.reload}
+              reader={conn.status?.reader}
+              readerAllowed={conn.readerAllowed}
+              onSetReader={(allow) => {
+                conn.setReader(allow);
+                showToast(allow ? 'Weave will send photos you add to NVIDIA NIM to read them.' : 'Weave won’t send photos anywhere. You can type the details instead.');
+              }}
               techDetails={techDetails}
               activity={activity}
             />
@@ -671,6 +677,9 @@ export function WorkspacePage({ routeView = null }) {
       <UploadSheet
         job={uploadJob}
         onClose={() => setUploadJob(null)}
+        reader={conn.status?.reader}
+        readerAllowed={conn.readerAllowed}
+        onAllowReader={() => conn.setReader(true)}
         onSave={saveItem}
         onUndoSave={undoSave}
         onAsk={ask}

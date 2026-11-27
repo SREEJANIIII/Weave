@@ -50,7 +50,8 @@ export function createApp({ root, hub, proposals, state, port }) {
     next();
   });
 
-  // Allow larger payloads for .ics / .csv / Markdown file imports under /api/connections; keep 64 KB cap elsewhere.
+  // Allow base64 encoded photo/PDF reading and larger connection imports while keeping a small cap elsewhere.
+  app.use('/api/read-document', express.json({ limit: '12mb', strict: false }));
   app.use('/api/connections', express.json({ limit: '2mb', strict: false }));
   app.use('/api', express.json({ limit: '64000b', strict: false }));
   app.use('/api/appliances', createAppliancesRouter({ hub }));

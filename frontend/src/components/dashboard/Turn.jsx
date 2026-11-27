@@ -589,7 +589,7 @@ export function Turn({
               </ol>
               {answer?.stats ? (
                 <p className="muted">
-                  Planner: {answer.stats.mode === 'nvidia' ? `NVIDIA (${answer.stats.model})` : answer.stats.mode === 'offline' ? 'offline script' : answer.stats.mode}
+                  Planner: {answer.stats.mode === 'nvidia' ? `NVIDIA (${answer.stats.model})` : 'offline script'}
                   {answer.stats.ms ? ` · ${answer.stats.ms} ms` : ''}
                 </p>
               ) : null}

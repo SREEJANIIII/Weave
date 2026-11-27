@@ -4,6 +4,7 @@ import { PLANNED } from '../hub.js';
 import { Run } from '../run.js';
 import { runOffline, DEMO_QUESTIONS } from '../agent-offline.js';
 import { runNvidia, explainError, hasCredentials, MODEL } from '../agent-nvidia.js';
+import { readDocument, readerAvailable, MAX_DOCUMENT_BYTES } from '../reader.js';
 import { now, isoDate, fmtLongDate } from '../../lib/dates.js';
 import { AppDataRepository } from '../../repositories/app-data-repository.js';
 import { createConnectionsRouter } from './connections.js';
@@ -50,6 +51,7 @@ export async function statusPayload({ hub, state, appData }) {
       nvidia: { model: MODEL, credentials: hasCredentials() },
       offline: { questions: DEMO_QUESTIONS },
     },
+    reader: { available: readerAvailable(state) },
     apps,
     planned: PLANNED,
     suggestions: DEMO_QUESTIONS,
@@ -111,6 +113,28 @@ export function createApiRouter({ hub, proposals, state }) {
 
   router.get('/status', async (req, res) => res.json(await statusPayload({ hub, state, appData })));
   router.get('/activity', (req, res) => res.json({ activity: hub.activity.slice(-150) }));
+
+  router.post('/read-document', async (req, res) => {
+    if (!readerAvailable(state)) {
+      return res.status(409).json({ error: 'Reading photos needs NVIDIA credentials and the NVIDIA planner.', hint: 'Type the details yourself, or switch the planner to NVIDIA.' });
+    }
+    const { data, mediaType, fileName } = req.body ?? {};
+    if (typeof data !== 'string' || !data) return res.status(400).json({ error: 'Add a photo or PDF first.' });
+    if (Buffer.byteLength(data, 'base64') > MAX_DOCUMENT_BYTES) {
+      return res.status(413).json({ error: 'That file is too big to read (8 MB at most).', hint: 'Try a smaller photo, or type the details yourself.' });
+    }
+    try {
+      return res.json(await readDocument({ data, mediaType, fileName }));
+    } catch (err) {
+      if (err.status === 415 || err.status === 422) return res.status(err.status).json({ error: err.message, hint: err.hint ?? '' });
+      if (err.name === 'VisionUnsupportedError') {
+        return res.status(422).json({ error: err.message, hint: 'Set NVIDIA_VISION_MODEL to an image-capable model in backend/.env and restart.' });
+      }
+      console.error('[read-document]', err);
+      const { message, hint } = explainError(err);
+      return res.status(502).json({ error: message, hint });
+    }
+  });
 
   router.post('/ask', async (req, res) => {
     const { question = '' } = req.body ?? {};

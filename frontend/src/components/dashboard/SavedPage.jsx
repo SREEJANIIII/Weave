@@ -5,6 +5,7 @@ import { FIELD_LABELS, KINDS, fmtDate, fmtMoney, imageFor, nounFor, summarize } 
 const SOURCE_TEXT = {
   sample: 'Sample that comes with the prototype',
   claude: 'Read from a photo, checked by you',
+  nvidia: 'Read from a photo, checked by you',
   file: 'Read from a file, checked by you',
   typed: 'Typed in by you',
 };

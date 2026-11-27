@@ -102,7 +102,7 @@ function ServiceRow({ s, busy, focus, onConnect, onDisconnect, techDetails }) {
   );
 }
 
-export function ConnectionsPage({ focusId, services, planned, offline, pending, onConnect, onDisconnect, onRetry, techDetails, activity }) {
+export function ConnectionsPage({ focusId, services, planned, offline, pending, onConnect, onDisconnect, onRetry, reader, readerAllowed, onSetReader, techDetails, activity }) {
   return (
     <div className="page">
       <header className="page-head">
@@ -124,6 +124,26 @@ export function ConnectionsPage({ focusId, services, planned, offline, pending, 
             <ServiceRow key={s.id} s={s} busy={Boolean(pending[s.id])} focus={focusId === s.id} onConnect={onConnect} onDisconnect={onDisconnect} techDetails={techDetails} />
           ))}
         </ul>
+      )}
+
+      {reader?.available && (
+        <>
+          <h2 className="page-sub">On this device</h2>
+          <ul className="plist">
+            <li className="prow">
+              <div className="prow-main">
+                <span className="prow-icon" aria-hidden="true">
+                  <Icon name="i-camera" />
+                </span>
+                <span className="prow-text">
+                  <span className="prow-title">Read photos and PDFs</span>
+                  <span className="prow-sub">Photos you add are sent to NVIDIA NIM to fill in the details</span>
+                </span>
+                <Switch on={readerAllowed} label="Read photos and PDFs with NVIDIA NIM" onChange={onSetReader} />
+              </div>
+            </li>
+          </ul>
+        </>
       )}
 
       <p className="page-foot">
