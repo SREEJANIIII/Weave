@@ -48,7 +48,9 @@ function parseGrid(lines) {
   for (const line of lines) {
     const range = line.match(TIME_RE)?.[0];
     if (!range || line === header) continue;
-    const cells = line.replace(TIME_RE, '').split(/\s*\|\s*|\t+|\s{3,}/).map(cleanSubject).filter(Boolean);
+    const rawCells = line.replace(TIME_RE, '').replace(/^\s*\|\s*/, '');
+    const cells = (rawCells.includes('|') ? rawCells.split('|') : rawCells.split(/\t+|\s{3,}/)).map(cleanSubject);
+    while (cells.length < days.length) cells.push('');
     days.forEach((day, index) => { const item = entry(day, range, cells[index]); if (item) results.push(item); });
   }
   return results;
