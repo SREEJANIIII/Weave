@@ -7,7 +7,7 @@ Ask ──▶ Weave app ──▶ planner (NVIDIA, or the offline script)
 Ask ──▶ Weave app ──▶ planner (NVIDIA, or the offline script)
                           │  picks tools
                           ▼
-                     MCP client ──tools/list, tools/call──▶ MCP servers: Calendar · Notes · Tasks · Money · Wishlist · Appliances & Bills · Wardrobe
+                     MCP client ──tools/list, tools/call──▶ MCP servers: Calendar · Notes · Tasks · Money · Wishlist · Appliances & Bills · Wardrobe · Timetable
                           │
              reads run straight away · writes are held as drafts
                           ▼
@@ -23,7 +23,7 @@ Weave/
 │   ├── public/        Fonts, favicons, manifest, and Netlify SPA redirects
 │   ├── vite.config.js Vite config with /api proxy to the backend
 │   └── package.json
-├── backend/       Express server, planners and the seven MCP servers
+├── backend/       Express server, planners and the eight MCP servers
 │   ├── src/           Express app and API routers, MCP client, planners
 │   ├── mcp-servers/   Calendar, Notes, Tasks, Money, Wishlist, Appliances
 │   ├── models/        Mongoose schemas (including appliances, documents, deadlines, reminders)
@@ -110,19 +110,20 @@ npm --prefix backend run test:appliances
 | Part | Status |
 |---|---|
 | MCP protocol: client, `tools/list`, `tools/call`, tool annotations | **Real**, using the official `@modelcontextprotocol/sdk` over stdio |
-| Calendar, Notes, Tasks, Money, Wishlist & sizes, and Wardrobe servers | **Real MCP servers.** Calendar/Notes/Tasks/Money use sample data, Wishlist uses MongoDB, and Wardrobe uses a local persistent review store. Nothing connects to a real account or shopping platform. |
+| Calendar, Notes, Tasks, Money, Wishlist & sizes, Wardrobe, and Timetable servers | **Real MCP servers.** Calendar/Notes/Tasks/Money use sample data, Wishlist/Timetable use MongoDB, and Wardrobe uses a local persistent review store. Nothing connects to a real account or shopping platform. |
 | Money | Reads `backend/data/statement.csv` if you add one (format in `backend/data/statement.example.csv`); otherwise a sample statement. Never connects to a bank or UPI app. |
 | Approval gate | **Real.** Any tool not marked `readOnlyHint: true` is held as a draft; it runs only after you approve, then Weave reads the record back before saying "Done". |
 | Wishlist and size intelligence | **Implemented with MongoDB persistence and synthetic charts.** Wishlist CRUD, occasion tags, a clearly labelled sample profile, deterministic brand/category charts, unit conversion, missing-measurement and between-size handling are available through the Wishlist & sizes MCP server. |
 | Occasion-aware reminders | **Implemented as a read-and-suggest workflow.** Upcoming records from Calendar are matched to wishlist occasion tags in configurable 30/14/7-day windows. Creating a Task or Calendar reminder remains approval-gated. Festival dates are not hardcoded. |
 | Appliances & Bills | **Implemented.** PDF/JPG/JPEG/PNG uploads, PDF text extraction, local OCR, vision reading for handwriting, a review screen, deduplicated appliances, confirmed deadlines, recurring EMIs and configurable reminders. Documents are stored privately; unconfirmed values never become active reminders. |
 | Wardrobe | **Implemented.** Garment photo upload for local review, editable garment metadata, persistent browse/search, archive, and occasion-based outfit recommendations. Image bytes remain local to the browser; metadata is persisted by the Wardrobe MCP server. |
+| Timetable | **Implemented.** Timetable PDFs are extracted into recurring weekday/time/subject rows, reviewed and confirmed before MongoDB persistence. Dedicated MCP tools answer class, next-class and free-period questions without inventing calendar dates. |
 | NVIDIA planner | Built on the official OpenAI JavaScript SDK against NVIDIA's OpenAI-compatible endpoint. Default model: `openai/gpt-oss-20b`; override with `NVIDIA_MODEL`. Document images use `NVIDIA_VISION_MODEL` and are only sent after image support is verified. |
 | Email, fitness apps, travel, learning | **Planned.** Shown as planned in the app and not connected. |
 
 ## Demo script (about 2 minutes)
 
-1. Point at the left rail: seven MCP servers, the tools each one exposes, and which ones *ask first*.
+1. Point at the left rail: eight MCP servers, the tools each one exposes, and which ones *ask first*.
 2. Ask *"What should I follow up on today, and when can I fit in a workout?"* and watch the MCP calls stream in.
 3. Hover a citation number: the matching record lights up on the right.
 4. Open **Edit** on the run, move it to 6:30, then **Approve**. The card says it was added and read back from the calendar. Open **MCP activity** to show the held write, the approval and the read-back.
@@ -137,7 +138,7 @@ npm --prefix backend run test:appliances
 
 | Path | What it does |
 |---|---|
-| `backend/mcp-servers/*.js` | Seven MCP servers (`McpServer` + stdio). Tools carry MCP annotations: reads are `readOnlyHint: true`; wishlist/profile mutations, wardrobe mutations, `create_task`, `create_event`, and appliance writes are not. |
+| `backend/mcp-servers/*.js` | Eight MCP servers (`McpServer` + stdio). Tools carry MCP annotations: reads are `readOnlyHint: true`; wishlist/profile mutations, wardrobe mutations, `create_task`, `create_event`, and appliance writes are not. |
 | `backend/src/hub.js` | Weave's MCP client. Spawns each server, discovers tools, calls them, and logs every message for the activity panel. |
 | `backend/src/run.js` | One question = one run. Reads register citable sources, writes become drafts, and the answer may only cite records that were actually read. |
 | `backend/src/agent-nvidia.js` | NVIDIA planner: each MCP tool becomes an OpenAI function declaration; write functions only create drafts. The final answer comes back through `present_answer`. |
@@ -173,6 +174,10 @@ The Appliances MCP server (`backend/mcp-servers/appliances.js`) exposes 14 tools
 ### Wardrobe
 
 The Wardrobe MCP server (`backend/mcp-servers/wardrobe.js`) provides persistent garment browsing, search, save/update/archive, and occasion-based outfit recommendations. Open **Wardrobe** from the workspace sidebar or visit `/app/wardrobe`. The upload control reads a garment photo in the browser for review; the confirmed metadata is saved through `/api/wardrobe` and the Wardrobe MCP tools. Image bytes are not sent to an external model or stored by the current implementation.
+
+### Timetable
+
+Open **Timetable** from the workspace sidebar or visit `/app/timetable`. Upload a PDF, review the extracted weekday/time/subject rows, edit or remove incorrect rows, and confirm the schedule. Confirmed entries are stored in MongoDB with the source document id and are retrieved through `get_timetable`, `get_classes_for_day`, `get_next_class`, `get_next_class_by_subject`, `get_free_slots`, and `get_schedule_range`. Recurring weekday entries are not converted into dated calendar events.
 
 ### MongoDB persistence and privacy
 
