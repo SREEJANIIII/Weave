@@ -31,6 +31,7 @@ const itemFields = {
   name: z.string().min(2), brand: z.string().optional(), category: z.string().min(2),
   color: z.string().optional(), size: z.string().optional(), occasion: z.string().optional(),
   season: z.string().optional(), notes: z.string().optional(), imageName: z.string().optional(),
+  imageData: z.string().max(350_000).optional(),
   status: z.enum(['active', 'archived']).optional(),
 };
 const server = createServer('weave-wardrobe');
@@ -83,13 +84,61 @@ server.registerTool('delete_wardrobe_item', { title: 'Delete wardrobe item', des
 server.registerTool('recommend_outfits', { title: 'Recommend outfits', description: 'Suggest combinations using only this user’s active wardrobe garments for an occasion.', inputSchema: { ...ownerField, occasion: z.string().optional(), limit: z.number().int().min(1).max(10).optional() }, annotations: READ }, async ({ owner_id, occasion = '', limit = 3 }) => {
   const items = (await readItems()).filter((item) => owner(item.ownerId) === owner(owner_id) && item.status === 'active');
   if (!items.length) return ok({ occasion, outfits: [], wardrobe_item_ids: [], empty: true, reason: 'Upload and save clothing in Wardrobe before asking for an outfit.' });
-  const target = occasion.toLowerCase();
-  const scored = items.map((item) => ({ item, score: target && item.occasion?.toLowerCase().includes(target) ? 2 : 1 }));
-  scored.sort((a, b) => b.score - a.score);
-  const selected = scored.slice(0, limit).map(({ item }) => item);
-  const wardrobe_item_ids = new Set(items.map((item) => item.id));
-  const outfits = selected.map((item) => ({ id: item.id, items: wardrobe_item_ids.has(item.id) ? [item] : [], explanation: target && item.occasion?.toLowerCase().includes(target) ? `Matches the ${occasion} occasion.` : 'A saved active wardrobe item.' })).filter((outfit) => outfit.items.length > 0);
-  return ok({ occasion, outfits: outfits.map((outfit) => ({ ...outfit, items: outfit.items.map(publicItem) })), wardrobe_item_ids: outfits.flatMap((outfit) => outfit.items.map((item) => item.id)), empty: outfits.length === 0 });
+  const target = occasion.toLowerCase().trim();
+  const matchesOcc = (it) => Boolean(target && it.occasion?.toLowerCase().includes(target));
+  const score = (it) => (matchesOcc(it) ? 2 : 1);
+  const sorted = [...items].sort((a, b) => score(b) - score(a));
+
+  const tops = sorted.filter((i) => /^(top|shirt|blouse|t-shirt|tee|kurta)s?$/i.test(i.category));
+  const bottoms = sorted.filter((i) => /^(bottom|trouser|pant|jeans|skirt|shorts)s?$/i.test(i.category));
+  const onePiece = sorted.filter((i) => /^(dress|dresses|ethnic|saree|jumpsuit|suit)$/i.test(i.category));
+  const footwear = sorted.filter((i) => /^(footwear|shoes|heels|sneakers|juttis)$/i.test(i.category));
+
+  const outfits = [];
+  const usedPairs = new Set();
+
+  // 1. Pair tops + bottoms (+ optional footwear) when both exist
+  for (const top of tops) {
+    for (const bottom of bottoms) {
+      if (outfits.length >= limit) break;
+      const key = `${top.id}+${bottom.id}`;
+      if (usedPairs.has(key)) continue;
+      usedPairs.add(key);
+      const combo = [top, bottom];
+      if (footwear.length) combo.push(footwear[0]);
+      const anyMatch = combo.some(matchesOcc);
+      outfits.push({
+        id: `outfit_${top.id}_${bottom.id}`,
+        items: combo.map(publicItem),
+        explanation: anyMatch ? `Paired for ${occasion} from your saved top & bottom.` : 'Balanced top and bottom pairing from your wardrobe.',
+      });
+    }
+  }
+
+  // 2. Include one-piece garments (dresses / ethnic)
+  for (const piece of onePiece) {
+    if (outfits.length >= limit) break;
+    const combo = footwear.length ? [piece, footwear[0]] : [piece];
+    outfits.push({
+      id: `outfit_${piece.id}`,
+      items: combo.map(publicItem),
+      explanation: matchesOcc(piece) ? `Matches the ${occasion} occasion.` : 'Complete look from your active wardrobe.',
+    });
+  }
+
+  // 3. Fallback to individual saved items if no pairs/one-pieces filled the list
+  if (!outfits.length) {
+    for (const item of sorted.slice(0, limit)) {
+      outfits.push({
+        id: item.id,
+        items: [publicItem(item)],
+        explanation: matchesOcc(item) ? `Matches the ${occasion} occasion.` : 'A saved active wardrobe item.',
+      });
+    }
+  }
+
+  const wardrobe_item_ids = [...new Set(outfits.flatMap((o) => o.items.map((it) => it.id)))];
+  return ok({ occasion, outfits, wardrobe_item_ids, empty: outfits.length === 0 });
 });
 
 await serve(server);

@@ -11,12 +11,12 @@ export const READABLE_TYPES = new Set(['image/jpeg', 'image/png', 'application/p
 const FIELD_NAMES = ['item', 'merchant', 'date', 'amount', 'currency', 'warranty_until', 'due_date', 'time', 'place', 'reference', 'notes'];
 const KINDS = new Set(['receipt', 'warranty', 'bill', 'event', 'workout', 'other']);
 
-function promptFor(fileName) {
+function promptFor(fileName, hasExtractedText = false) {
   return `Read this photo or PDF for Weave, a personal assistant. Today is ${isoDate(now())}.
-Return one JSON object only with this exact shape:
+Return ONE valid JSON object only (no markdown fences, no commentary outside JSON) with this exact shape:
 {"readable":true,"kind":"receipt|warranty|bill|event|workout|other","title":"short useful title","item":"","merchant":"","date":"YYYY-MM-DD or empty","amount":"digits and optional decimal or empty","currency":"ISO currency code or empty","warranty_until":"YYYY-MM-DD or empty","due_date":"YYYY-MM-DD or empty","time":"HH:MM or empty","place":"","reference":"","notes":"","unsure":[],"text":"","tables":[{"title":"","columns":[],"rows":[[]]}]}
 Rules:
-- "text": transcribe ALL readable text in the document, in reading order, one line per printed line (use \n). Include headings, legends, footnotes and names.
+- "text": ${hasExtractedText ? 'leave as "" (already captured verbatim) unless layout lines are garbled and need cleanup.' : 'transcribe ALL readable text in the document, in reading order, one line per printed line (use \\n). Include headings, legends, footnotes and names.'}
 - "tables": transcribe EVERY table completely. "columns" is the header row; each entry of "rows" is one table row with its cells in column order. If a cell spans several columns, repeat its value in each. Keep codes, times and room numbers exactly as printed. For a timetable, keep one row per day (or per time slot) exactly as laid out.
 - Copy only information visible in the document. Never guess or invent values. Leave missing fields empty.
 - Use a date only when the full date is visible. Do not infer a year from today's date.
@@ -78,10 +78,10 @@ export async function readDocument({ data, mediaType, fileName = '' }) {
 
   // Photos go straight to the vision model: it keeps a timetable's grid, which plain OCR flattens.
   const source = await extractSource({ buffer, mimeType: mediaType, kind: mediaType === 'application/pdf' ? 'other' : 'handwritten' });
-  const prompt = promptFor(fileName);
+  const prompt = promptFor(fileName, source.images.length === 0 && Boolean(source.text));
   const raw = source.images.length
     ? await extractFromImages(prompt, source.images)
-    : await extractFromText(prompt, source.text);
+    : await extractFromText(prompt, source.text.slice(0, 16_000));
   const details = cleanDetails(raw);
   // Everything read from the document, kept with the paper so later questions can be answered from it.
   const content = cleanContent({

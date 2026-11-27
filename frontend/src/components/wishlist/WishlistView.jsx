@@ -62,6 +62,7 @@ export function WishlistView({
   onReconcileReminders,
   onInspectSize,
   onGoToProfile,
+  onGoToConnections,
 }) {
   const [search, setSearch] = useState('');
   const [occasionFilter, setOccasionFilter] = useState('All');
@@ -114,9 +115,9 @@ export function WishlistView({
 
   const sourceBadge =
     syncMode === 'backend'
-      ? 'MongoDB + Wishlist MCP'
+      ? 'MongoDB · Live'
       : syncMode === 'disabled'
-        ? 'Wishlist & sizes switched off in Apps'
+        ? 'Switched off in Connections'
         : 'Local sample data · Backend offline';
 
   return (
@@ -150,7 +151,12 @@ export function WishlistView({
           <Icon name="i-alert" />
           <div>
             <strong>Wishlist &amp; sizes is switched off.</strong>
-            <p>Enable Wishlist &amp; sizes in the Ask Weave Apps inspector to load or save items from MongoDB.</p>
+            <p>Turn on Wishlist &amp; sizes in Connections to load, save, and match items in MongoDB.</p>
+            {onGoToConnections && (
+              <button type="button" className="btn btn-quiet btn-sm" onClick={onGoToConnections}>
+                Open Connections
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -9,17 +9,28 @@ import assert from 'node:assert/strict';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 4399;
 const base = `http://127.0.0.1:${PORT}`;
-const server = spawn(process.execPath, ['--env-file-if-exists=.env', 'src/server.js'], { cwd: root, env: { ...process.env, PORT: String(PORT), WEAVE_MODE: 'offline' }, stdio: ['ignore', 'pipe', 'inherit'] });
+const smokeDb = `weave_smoke_${process.pid}`;
+let serverLogs = '';
+const server = spawn(process.execPath, ['--env-file-if-exists=.env', 'src/server.js'], {
+  cwd: root,
+  env: { ...process.env, PORT: String(PORT), WEAVE_MODE: 'offline', MONGODB_DB_NAME: smokeDb },
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+server.stdout?.on('data', (d) => { serverLogs = `${serverLogs}${d}`.slice(-3000); });
+server.stderr?.on('data', (d) => { serverLogs = `${serverLogs}${d}`.slice(-3000); });
 
 async function waitForServer() {
-  for (let i = 0; i < 50; i += 1) {
+  for (let i = 0; i < 120; i += 1) {
+    if (server.exitCode !== null) {
+      throw new Error(`server exited with code ${server.exitCode}\n${serverLogs}`);
+    }
     try {
       const r = await fetch(`${base}/api/status`);
       if (r.ok) return r.json();
     } catch {}
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 250));
   }
-  throw new Error('server did not start');
+  throw new Error(`server did not start\n${serverLogs}`);
 }
 
 const post = (url, body = {}) => fetch(`${base}${url}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
@@ -39,8 +50,21 @@ async function ask(question) {
 
 const ok = (label) => console.log(`  ✓ ${label}`);
 
+async function cleanupDb() {
+  if (!process.env.MONGODB_URI) return;
+  try {
+    const mongoose = (await import('mongoose')).default;
+    const conn = await mongoose.connect(process.env.MONGODB_URI, { dbName: smokeDb, serverSelectionTimeoutMS: 4000 }).catch(() => null);
+    if (conn) {
+      await mongoose.connection.dropDatabase().catch(() => {});
+      await mongoose.disconnect().catch(() => {});
+    }
+  } catch {}
+}
+
 try {
   const status = await waitForServer();
+  await post('/api/reset');
   assert.equal(status.apps.filter((a) => a.status === 'connected').length, 8, 'eight MCP apps connected');
   const wardrobeApp = status.apps.find((a) => a.id === 'wardrobe');
   assert.equal(wardrobeApp?.name, 'Wardrobe', 'Wardrobe is registered in the MCP status payload');
@@ -158,9 +182,11 @@ try {
 
   console.log('\n  All smoke checks passed.\n');
   server.kill('SIGINT');
+  await cleanupDb();
   process.exit(0);
 } catch (err) {
   console.error('\n  Smoke test failed:', err.message);
   server.kill('SIGINT');
+  await cleanupDb();
   process.exit(1);
 }

@@ -4,9 +4,11 @@ import { encryptProfile, decryptProfile } from '../../db/database.js';
 import {
   createGoogleAuthUrl,
   createGoogleKeepAuthUrl,
+  createGoogleNotesAuthUrl,
   exchangeGoogleCode,
   fetchCalDavEvents,
   fetchGoogleCalendarEvents,
+  fetchGoogleDriveNotes,
   fetchGoogleKeepNotes,
   fetchGoogleTasks,
   fetchIcsFeed,
@@ -59,8 +61,8 @@ const EXTERNAL_CONNECTORS = [
     id: 'samsung_calendar',
     name: 'Samsung Calendar & Notes',
     category: 'Supported via .ics export / Google & Outlook sync',
-    supportedNow: 'Export/Share events as .ics from Samsung Calendar, or connect the Google/Outlook account your Samsung Calendar syncs with.',
-    whyNeedsOAuth: 'Samsung Account does not expose a third-party calendar web API.',
+    supportedNow: 'Export Google Keep Takeout .json files, OR tap "Copy to Google Docs" inside Keep and connect Google Docs & Drive OAuth, OR connect Obsidian/Markdown folders.',
+    whyNeedsOAuth: 'Google restricts the Keep API (keep.readonly) to Google Workspace enterprise accounts, whereas Google Docs & Drive OAuth works on personal @gmail.com accounts.',
   },
   {
     id: 'email',
@@ -202,6 +204,18 @@ export function createConnectionsRouter({ appData }) {
             sourceType: 'google_oauth',
             sourceName: conn.sourceName,
             config: conn.config,
+          });
+          return res.json({ ok: true, imported: result.imported, connection: redactConnection(result.connection) });
+        }
+        if (conn.app === 'notes' && conn.provider === 'google_drive') {
+          const notes = await fetchGoogleDriveNotes(accessToken);
+          const result = await appData.importNotes(notes, {
+            connectionId: conn.id,
+            provider: 'google_drive',
+            sourceType: 'google_oauth',
+            sourceName: 'Google Docs & Drive (OAuth)',
+            config: conn.config,
+            replaceAll: false,
           });
           return res.json({ ok: true, imported: result.imported, connection: redactConnection(result.connection) });
         }
@@ -507,8 +521,9 @@ export function createConnectionsRouter({ appData }) {
     }
   });
 
-  // Google Keep OAuth — separate scope (keep.readonly), separate callback
-  router.get('/oauth/google/keep/start', (req, res) => {
+  // Google Docs & Drive OAuth for Notes (works with personal @gmail.com via drive.readonly)
+  // Reuses cfg.redirectUri (/api/oauth/google/callback) with flow:'notes' so no extra redirect URI is needed in GCP.
+  const startGoogleNotesOAuth = (req, res) => {
     const cfg = getGoogleOAuthConfig();
     if (!cfg.configured) {
       return res.status(400).json({
@@ -517,12 +532,15 @@ export function createConnectionsRouter({ appData }) {
       });
     }
     const state = crypto.randomBytes(16).toString('hex');
-    OAUTH_STATES.set(state, { createdAt: Date.now(), returnTo: safeReturn(req.query.return) });
-    const keepRedirectUri = cfg.redirectUri.replace('/callback', '/keep/callback');
-    const authUrl = createGoogleKeepAuthUrl({ clientId: cfg.clientId, redirectUri: keepRedirectUri, state });
+    OAUTH_STATES.set(state, { createdAt: Date.now(), returnTo: safeReturn(req.query.return), flow: 'notes' });
+    const authUrl = createGoogleNotesAuthUrl({ clientId: cfg.clientId, redirectUri: cfg.redirectUri, state });
     if (req.query.format === 'json') return res.json({ authUrl });
     return res.redirect(authUrl);
-  });
+  };
+
+  router.get('/oauth/google/notes/start', startGoogleNotesOAuth);
+  // Google restricts keep.readonly to Google Workspace domains (400 invalid_scope on @gmail.com); route personal Keep clicks cleanly to Docs/Drive sync.
+  router.get('/oauth/google/keep/start', startGoogleNotesOAuth);
 
   router.get('/oauth/google/keep/callback', async (req, res) => {
     const { code, state, error } = req.query;
@@ -555,10 +573,7 @@ export function createConnectionsRouter({ appData }) {
     }
   });
 
-  // Sync handler for Keep OAuth connection
-  // (handled generically via /connections/:id/sync below using stored encryptedTokens)
-
-  // Optional direct Google OAuth 2.0 flow (Google Calendar + Google Tasks)
+  // Direct Google OAuth 2.0 flow (Calendar + Tasks, or Docs/Drive Notes via flow)
   router.get('/oauth/google/start', (req, res) => {
     const cfg = getGoogleOAuthConfig();
     if (!cfg.configured) {
@@ -567,9 +582,12 @@ export function createConnectionsRouter({ appData }) {
         hint: 'Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend/.env, or use the Google Calendar Secret iCal URL without OAuth.',
       });
     }
+    const flow = req.query.flow === 'notes' ? 'notes' : 'calendar';
     const state = crypto.randomBytes(16).toString('hex');
-    OAUTH_STATES.set(state, { createdAt: Date.now(), returnTo: safeReturn(req.query.return) });
-    const authUrl = createGoogleAuthUrl({ clientId: cfg.clientId, redirectUri: cfg.redirectUri, state });
+    OAUTH_STATES.set(state, { createdAt: Date.now(), returnTo: safeReturn(req.query.return), flow });
+    const authUrl = flow === 'notes'
+      ? createGoogleNotesAuthUrl({ clientId: cfg.clientId, redirectUri: cfg.redirectUri, state })
+      : createGoogleAuthUrl({ clientId: cfg.clientId, redirectUri: cfg.redirectUri, state });
     if (req.query.format === 'json') return res.json({ authUrl });
     return res.redirect(authUrl);
   });
@@ -578,8 +596,10 @@ export function createConnectionsRouter({ appData }) {
     const { code, state, error } = req.query;
     const entry = takeState(state);
     const back = entry?.returnTo ?? '';
-    if (error) return res.redirect(`${back}/app/connections?app=calendar&oauth_error=${encodeURIComponent(String(error))}`);
-    if (!code || !entry) return res.redirect(`${back}/app/connections?app=calendar&oauth_error=invalid_state`);
+    const flow = entry?.flow || 'calendar';
+    const appTab = flow === 'notes' ? 'notes' : 'calendar';
+    if (error) return res.redirect(`${back}/app/connections?app=${appTab}&oauth_error=${encodeURIComponent(String(error))}`);
+    if (!code || !entry) return res.redirect(`${back}/app/connections?app=${appTab}&oauth_error=invalid_state`);
     const cfg = getGoogleOAuthConfig();
     try {
       const tokens = await exchangeGoogleCode({
@@ -589,6 +609,18 @@ export function createConnectionsRouter({ appData }) {
         redirectUri: cfg.redirectUri,
       });
       const encryptedTokens = encryptProfile(tokens);
+      if (flow === 'notes') {
+        const notes = await fetchGoogleDriveNotes(tokens.access_token);
+        await appData.importNotes(notes, {
+          connectionId: 'conn_google_drive_oauth',
+          provider: 'google_drive',
+          sourceType: 'google_oauth',
+          sourceName: 'Google Docs & Drive (OAuth)',
+          config: { encryptedTokens },
+          replaceAll: false,
+        });
+        return res.redirect(`${back}/app/connections?app=notes&connected=google_drive&notes=${notes.length}`);
+      }
       const [events, tasks] = await Promise.all([
         fetchGoogleCalendarEvents(tokens.access_token),
         fetchGoogleTasks(tokens.access_token).catch(() => []),
@@ -611,7 +643,7 @@ export function createConnectionsRouter({ appData }) {
       }
       return res.redirect(`${back}/app/connections?app=calendar&connected=google&events=${events.length}&tasks=${tasks.length}`);
     } catch (err) {
-      return res.redirect(`${back}/app/connections?app=calendar&oauth_error=${encodeURIComponent(err.message || 'oauth_failed')}`);
+      return res.redirect(`${back}/app/connections?app=${appTab}&oauth_error=${encodeURIComponent(err.message || 'oauth_failed')}`);
     }
   });
 

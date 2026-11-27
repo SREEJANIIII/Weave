@@ -70,6 +70,8 @@ export const YARN_VAR = {
   money: 'var(--yarn-workout)',
   wishlist: 'var(--yarn-wishlist)',
   appliances: 'var(--yarn-wishlist)',
+  wardrobe: 'var(--yarn-wishlist)',
+  timetable: 'var(--yarn-calendar)',
   saved: 'var(--color-edge)',
 };
 

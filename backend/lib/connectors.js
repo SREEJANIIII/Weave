@@ -509,19 +509,87 @@ export function getGoogleOAuthConfig(port = Number(process.env.PORT) || 4321) {
   return { configured: Boolean(clientId && clientSecret), clientId, clientSecret, redirectUri };
 }
 
-export function createGoogleAuthUrl({ clientId, redirectUri, state }) {
+export function createGoogleAuthUrl({ clientId, redirectUri, state, includeDrive = false }) {
+  const scopes = [
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/tasks.readonly',
+    ...(includeDrive ? ['https://www.googleapis.com/auth/drive.readonly'] : []),
+  ];
   const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   u.searchParams.set('client_id', clientId);
   u.searchParams.set('redirect_uri', redirectUri);
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('access_type', 'offline');
   u.searchParams.set('prompt', 'consent');
-  u.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly');
+  u.searchParams.set('scope', scopes.join(' '));
   u.searchParams.set('state', state);
   return u.href;
 }
 
-/** Google Keep OAuth URL — requests keep.readonly scope separately (needs Keep API enabled in GCP). */
+/** Google Drive & Docs OAuth URL — works with personal @gmail.com accounts via drive.readonly. */
+export function createGoogleNotesAuthUrl({ clientId, redirectUri, state }) {
+  const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  u.searchParams.set('client_id', clientId);
+  u.searchParams.set('redirect_uri', redirectUri);
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('access_type', 'offline');
+  u.searchParams.set('prompt', 'consent');
+  u.searchParams.set('scope', 'https://www.googleapis.com/auth/drive.readonly');
+  u.searchParams.set('state', state);
+  return u.href;
+}
+
+/** Fetch Google Docs, text/Markdown notes, and Keep Takeout .json files from Google Drive. */
+export async function fetchGoogleDriveNotes(accessToken) {
+  const q = "trashed = false and (mimeType = 'application/vnd.google-apps.document' or mimeType = 'text/plain' or mimeType = 'text/markdown' or name contains '.md' or name contains '.txt')";
+  const listUrl = new URL('https://www.googleapis.com/drive/v3/files');
+  listUrl.searchParams.set('q', q);
+  listUrl.searchParams.set('orderBy', 'modifiedTime desc');
+  listUrl.searchParams.set('pageSize', '25');
+  listUrl.searchParams.set('fields', 'files(id,name,mimeType,modifiedTime)');
+
+  const res = await fetch(listUrl.href, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'Could not list Google Docs / Drive notes.');
+
+  const files = data.files ?? [];
+  const notes = [];
+  for (const file of files.slice(0, 20)) {
+    const isGDoc = file.mimeType === 'application/vnd.google-apps.document';
+    const contentUrl = isGDoc
+      ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}/export?mimeType=text%2Fplain`
+      : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`;
+    const fileRes = await fetch(contentUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => null);
+    if (!fileRes || !fileRes.ok) continue;
+    const raw = (await fileRes.text()).replace(/\r\n/g, '\n').replace(/^\uFEFF/, '').trim();
+    if (!raw) continue;
+    const body = raw
+      .replace(/^[☐□]\s*/gm, '- [ ] @me ')
+      .replace(/^[☑✓✔]\s*/gm, '- [x] @me ')
+      .slice(0, 20_000);
+    const updated = file.modifiedTime ? String(file.modifiedTime).slice(0, 10) : isoDate(new Date());
+    const parsed = parseMarkdownNote(file.name, body, updated);
+    const tags = new Set(parsed.tags ?? []);
+    tags.delete('imported');
+    tags.add('google-docs');
+    notes.push({
+      id: `gdrive_${String(file.id).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24)}`,
+      title: parsed.title || file.name,
+      updated,
+      tags: [...tags],
+      body: parsed.body,
+    });
+  }
+  return notes;
+}
+
+/** Workspace-only Google Keep OAuth helper (not valid for personal @gmail.com accounts). */
 export function createGoogleKeepAuthUrl({ clientId, redirectUri, state }) {
   const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   u.searchParams.set('client_id', clientId);

@@ -34,8 +34,12 @@ export function WishlistFormModal({ initialItem, syncMode = 'local', onSave, onC
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim() || !brand.trim()) return;
-    if (syncMode === 'backend' && !url.trim()) {
-      setFormError('Product URL (https://...) is required to persist to MongoDB.');
+    let normalizedUrl = url.trim();
+    if (normalizedUrl && !/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalizedUrl)) {
+      normalizedUrl = `https://${normalizedUrl}`;
+    }
+    if (syncMode === 'backend' && !normalizedUrl) {
+      setFormError('Product URL (https://...) is required to save to MongoDB.');
       return;
     }
     setSaving(true);
@@ -45,7 +49,7 @@ export function WishlistFormModal({ initialItem, syncMode = 'local', onSave, onC
       brand: brand.trim(),
       category,
       occasion: occasion.trim() || 'Casual',
-      url: url.trim(),
+      url: normalizedUrl,
       image: image.trim() || SAMPLE_IMAGE_PRESETS[0].value,
       price: price !== '' && price !== null ? Number(price) : undefined,
       status: initialItem ? status : 'saved',
@@ -135,9 +139,9 @@ export function WishlistFormModal({ initialItem, syncMode = 'local', onSave, onC
               <div className="cn-inline-form">
                 <input
                   id="wl-url"
-                  type="url"
+                  type="text"
                   required={syncMode === 'backend'}
-                  placeholder="https://..."
+                  placeholder="https://example.com/product"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                 />

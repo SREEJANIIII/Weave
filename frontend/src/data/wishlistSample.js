@@ -6,15 +6,23 @@ export const CATEGORIES = ['Tops', 'Dresses', 'Trousers', 'Ethnic', 'Footwear', 
 const CATEGORY_TO_UI = {
   top: 'Tops',
   tops: 'Tops',
+  shirt: 'Tops',
+  blouse: 'Tops',
   dress: 'Dresses',
   dresses: 'Dresses',
   trouser: 'Trousers',
   trousers: 'Trousers',
+  pants: 'Trousers',
+  jeans: 'Trousers',
   saree: 'Ethnic',
   sarees: 'Ethnic',
+  kurta: 'Ethnic',
   ethnic: 'Ethnic',
   footwear: 'Footwear',
+  shoes: 'Footwear',
   outerwear: 'Outerwear',
+  coat: 'Outerwear',
+  jacket: 'Outerwear',
 };
 
 const CATEGORY_TO_BACKEND = {

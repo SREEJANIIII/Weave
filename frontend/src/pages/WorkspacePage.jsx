@@ -10,6 +10,7 @@ import { SavedPage } from '../components/dashboard/SavedPage';
 import { UploadSheet } from '../components/dashboard/UploadSheet';
 import { Toast } from '../components/dashboard/Toast';
 import { WishlistView } from '../components/wishlist/WishlistView';
+import { SizeIntelligenceModal } from '../components/wishlist/SizeIntelligenceModal';
 import { SizeProfileView } from '../components/profile/SizeProfileView';
 import { AppliancesView } from '../components/appliances/AppliancesView';
 import { WardrobeView } from '../components/wardrobe/WardrobeView';
@@ -78,15 +79,34 @@ export function WorkspacePage({ routeView = null }) {
 
   usePageMeta({
     page: ['wishlist', 'size-profile', 'appliances', 'wardrobe', 'timetable'].includes(view) ? 'app' : 'dashboard',
-    title: { wishlist: 'Weave — Wishlist', 'size-profile': 'Weave — Sizes', appliances: 'Weave — Appliances & Bills', saved: 'Weave — Saved', connections: 'Weave — Connections' }[view] ?? 'Weave',
+    title: { wishlist: 'Weave — Wishlist', 'size-profile': 'Weave — Sizes', appliances: 'Weave — Appliances & Bills', wardrobe: 'Weave — Wardrobe', timetable: 'Weave — Timetable', saved: 'Weave — Saved', connections: 'Weave — Connections' }[view] ?? 'Weave',
     description: 'Ask Weave about your plans, purchases and papers. It answers from what you’ve saved and connected, and asks before changing anything.',
   });
 
   const conn = useConnections();
+  const wishlistState = conn.services.find((s) => s.id === 'wishlist')?.state;
+  const calendarState = conn.services.find((s) => s.id === 'calendar')?.state;
+  const applianceService = conn.services.find((s) => s.id === 'appliances');
   const papers = useSavedPapers();
-  const store = useWishlistStore();
+  const store = useWishlistStore({
+    backendOnline: conn.synced && !conn.offline,
+    wishlistEnabled: wishlistState === 'connected',
+    calendarEnabled: calendarState === 'connected',
+  });
+  const [sizeModalProduct, setSizeModalProduct] = useState(null);
+  const [sizeModalResult, setSizeModalResult] = useState(null);
+  const [sizeModalLoading, setSizeModalLoading] = useState(false);
   const chats = useChats();
   const narrow = useNarrow();
+
+  const inspectProductSize = useCallback(async (item) => {
+    setSizeModalProduct(item);
+    setSizeModalResult(null);
+    setSizeModalLoading(true);
+    const res = await store.matchSizeForProduct(item);
+    setSizeModalResult(res);
+    setSizeModalLoading(false);
+  }, [store.matchSizeForProduct]);
 
   const [busy, setBusy] = useState(false);
   const [question, setQuestion] = useState('');
@@ -170,6 +190,7 @@ export function WorkspacePage({ routeView = null }) {
   /* ---------- Today cards ---------- */
 
   const connectedKey = conn.connected.map((s) => s.id).join(',');
+  const [glanceTick, setGlanceTick] = useState(0);
   useEffect(() => {
     if (!conn.synced) return undefined;
     if (conn.offline) {
@@ -177,22 +198,41 @@ export function WorkspacePage({ routeView = null }) {
       setGlanceLoading(false);
       return undefined;
     }
+    const calSvc = conn.services.find((s) => s.id === 'calendar');
+    const taskSvc = conn.services.find((s) => s.id === 'tasks');
     let live = true;
     setGlanceLoading(true);
-    api('/api/calendar/events').then((r) => {
+    Promise.all([
+      calSvc?.state === 'connected' ? api('/api/calendar/events') : Promise.resolve(null),
+      taskSvc?.state === 'connected' ? api('/api/app-data/tasks') : Promise.resolve(null),
+    ]).then(([rCal, rTasks]) => {
       if (!live) return;
-      const events = r.ok ? (r.data.events ?? []) : [];
       const today = conn.status?.today ?? new Date().toISOString().slice(0, 10);
       const now = new Date();
       const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const next = events.find((event) => event.date > today || (event.date === today && event.end >= hhmm)) ?? null;
-      setGlance({ now: hhmm, calendar: { status: r.ok ? 'ok' : 'error', next }, tasks: { status: 'unavailable', due: [] } });
+      let calStatus = 'off';
+      let next = null;
+      if (calSvc?.state === 'unavailable') calStatus = 'error';
+      else if (calSvc?.state === 'connected') {
+        calStatus = rCal?.ok ? 'ok' : 'error';
+        const events = rCal?.ok ? (rCal.data.events ?? []) : [];
+        next = events.find((event) => event.date > today || (event.date === today && event.end >= hhmm)) ?? null;
+      }
+      let taskStatus = 'unavailable';
+      let due = [];
+      if (taskSvc?.state === 'connected' && rTasks?.ok) {
+        taskStatus = 'ok';
+        due = (rTasks.data.tasks ?? [])
+          .filter((t) => t.status !== 'done' && t.due && t.due >= today)
+          .sort((a, b) => a.due.localeCompare(b.due));
+      }
+      setGlance({ now: hhmm, calendar: { status: calStatus, next }, tasks: { status: taskStatus, due } });
       setGlanceLoading(false);
     });
     return () => {
       live = false;
     };
-  }, [conn.synced, conn.offline, connectedKey]);
+  }, [conn.synced, conn.offline, connectedKey, glanceTick]);
 
   useEffect(() => {
     if (!techDetails || view !== 'connections' || conn.offline) return;
@@ -235,9 +275,6 @@ export function WorkspacePage({ routeView = null }) {
   }, [chats.activeId]);
 
   /* ---------- Asking ---------- */
-
-  const wishlistState = conn.services.find((s) => s.id === 'wishlist')?.state;
-  const applianceService = conn.services.find((s) => s.id === 'appliances');
 
   const ask = useCallback(
     async (raw) => {
@@ -462,7 +499,10 @@ export function WorkspacePage({ routeView = null }) {
     await papers.restoreSamples();
     if (!conn.offline) {
       const r = await api('/api/reset', {});
-      if (r.ok) await conn.resync(r.data);
+      if (r.ok) {
+        await conn.resync(r.data);
+        await store.refreshAll();
+      }
     }
     chats.updateAllTurns((t) => ({ ...t, proposals: (t.proposals ?? []).map((p) => (p.status === 'pending' ? { ...p, status: 'expired' } : p)) }));
     showToast('The sample data is back.');
@@ -605,8 +645,9 @@ export function WorkspacePage({ routeView = null }) {
               onConnect={connect}
               onDisconnect={disconnect}
               onNotify={showToast}
-              onLinked={(id) => {
-                if (conn.services.find((x) => x.id === id)?.state === 'off') conn.setService(id, true);
+              onLinked={async (id) => {
+                if (conn.services.find((x) => x.id === id)?.state === 'off') await conn.setService(id, true);
+                setGlanceTick((n) => n + 1);
               }}
               onRetry={conn.reload}
               reader={conn.status?.reader}
@@ -625,7 +666,10 @@ export function WorkspacePage({ routeView = null }) {
               connectionError={applianceService?.error}
             />
           ) : view === 'wardrobe' ? (
-            <WardrobeView enabled={conn.services.find((service) => service.id === 'wardrobe')?.state === 'connected'} />
+            <WardrobeView
+              enabled={conn.services.find((service) => service.id === 'wardrobe')?.state === 'connected'}
+              onOpenConnections={() => openPanel('connections', 'wardrobe')}
+            />
           ) : view === 'timetable' ? (
             <TimetableView enabled={conn.services.find((service) => service.id === 'timetable')?.state === 'connected'} />
           ) : view === 'wishlist' ? (
@@ -635,11 +679,19 @@ export function WorkspacePage({ routeView = null }) {
                 sizeProfile={store.sizeProfile}
                 occasions={store.occasions}
                 reminderPrefs={store.reminderPrefs}
+                backendReminders={store.backendReminders}
+                syncMode={store.syncMode}
+                calendarEnabled={calendarState === 'connected'}
+                syncing={store.syncing}
+                serverToday={conn.status?.today}
                 onAdd={store.addItem}
                 onUpdate={store.updateItem}
                 onRemove={store.removeItem}
                 onDismissReminder={store.dismissReminder}
+                onReconcileReminders={store.reconcileReminders}
+                onInspectSize={inspectProductSize}
                 onGoToProfile={() => navigate('/app/size-profile')}
+                onGoToConnections={() => openPanel('connections', 'wishlist')}
               />
             </div>
           ) : view === 'size-profile' ? (
@@ -649,9 +701,16 @@ export function WorkspacePage({ routeView = null }) {
                 wishlist={store.wishlist}
                 occasions={store.occasions}
                 reminderPrefs={store.reminderPrefs}
+                backendReminders={store.backendReminders}
+                syncMode={store.syncMode}
+                calendarEnabled={calendarState === 'connected'}
+                profileDeleted={store.profileDeleted}
+                serverToday={conn.status?.today}
                 onSaveProfile={store.saveProfile}
                 onClearProfile={store.clearProfileMeasurements}
+                onDeleteProfile={store.deleteProfile}
                 onUpdateReminderPrefs={store.updateReminderPrefs}
+                onReconcileReminders={store.reconcileReminders}
                 onAddOccasion={store.addOccasionEvent}
                 onOpenWishlist={() => navigate('/app/wishlist')}
               />
@@ -731,6 +790,18 @@ export function WorkspacePage({ routeView = null }) {
         onAsk={ask}
         onOpenSaved={(id) => openPanel('saved', id)}
         onNotSaved={() => showToast('Not saved. Nothing was kept.')}
+      />
+
+      <SizeIntelligenceModal
+        product={sizeModalProduct}
+        result={sizeModalResult}
+        loading={sizeModalLoading}
+        unit={store.sizeProfile?.unit || 'cm'}
+        onClose={() => {
+          setSizeModalProduct(null);
+          setSizeModalResult(null);
+        }}
+        onGoToProfile={() => navigate('/app/size-profile')}
       />
 
       <Toast

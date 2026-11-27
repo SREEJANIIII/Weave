@@ -53,6 +53,7 @@ export function SizeProfileView({
     return obj;
   });
   const [savedNote, setSavedNote] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -111,6 +112,7 @@ export function SizeProfileView({
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
+    setSaveError('');
     const next = {
       ...sizeProfile,
       unit,
@@ -123,7 +125,9 @@ export function SizeProfileView({
     }
     const res = await onSaveProfile(next);
     setSaving(false);
-    if (!res || res.ok !== false) {
+    if (res && res.ok === false) {
+      setSaveError(res.error || 'Could not save size profile.');
+    } else {
       setSavedNote(true);
       setTimeout(() => setSavedNote(false), 3000);
     }
@@ -376,6 +380,9 @@ export function SizeProfileView({
               <Icon name="i-check" />
               <span>{saving ? 'Saving...' : 'Save profile'}</span>
             </button>
+            {saveError && (
+              <span className="field-error" role="alert">{saveError}</span>
+            )}
             {savedNote && (
               <span className="sp-saved-msg" role="status">
                 Saved — size recommendations updated.

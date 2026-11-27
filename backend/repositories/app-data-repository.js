@@ -8,6 +8,7 @@ import { Task } from '../models/task.js';
 import { Transaction } from '../models/transaction.js';
 import { AppConnection } from '../models/app-connection.js';
 import { calendarEvents, notes as sampleNotes, tasks as sampleTasks, transactions as sampleTransactions } from '../mcp-servers/lib/sample-data.js';
+import { now, isoDate } from '../lib/dates.js';
 import { parseStatementCsv } from '../lib/connectors.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -99,30 +100,39 @@ const toConn = (doc) => ({
 });
 
 export class AppDataRepository {
+  async #needsSampleRefresh(app, sampleId) {
+    const conns = await AppConnection.find({ app }).lean();
+    if (conns.length === 1 && conns[0]._id === sampleId && conns[0].sourceType === 'sample') {
+      const seededDay = conns[0].lastSyncedAt ? isoDate(new Date(conns[0].lastSyncedAt)) : '';
+      if (seededDay !== isoDate(now())) return true;
+    }
+    return false;
+  }
+
   async ensureCalendarSeeded() {
     const count = await AppConnection.countDocuments({ app: 'calendar' });
-    if (count === 0 && (await CalendarEvent.countDocuments()) === 0) {
+    if ((count === 0 && (await CalendarEvent.countDocuments()) === 0) || (await this.#needsSampleRefresh('calendar', 'sample_calendar'))) {
       await this.resetCalendarSample();
     }
   }
 
   async ensureNotesSeeded() {
     const count = await AppConnection.countDocuments({ app: 'notes' });
-    if (count === 0 && (await Note.countDocuments()) === 0) {
+    if ((count === 0 && (await Note.countDocuments()) === 0) || (await this.#needsSampleRefresh('notes', 'sample_notes'))) {
       await this.resetNotesSample();
     }
   }
 
   async ensureTasksSeeded() {
     const count = await AppConnection.countDocuments({ app: 'tasks' });
-    if (count === 0 && (await Task.countDocuments()) === 0) {
+    if ((count === 0 && (await Task.countDocuments()) === 0) || (await this.#needsSampleRefresh('tasks', 'sample_tasks'))) {
       await this.resetTasksSample();
     }
   }
 
   async ensureMoneySeeded() {
     const count = await AppConnection.countDocuments({ app: 'money' });
-    if (count === 0 && (await Transaction.countDocuments()) === 0) {
+    if ((count === 0 && (await Transaction.countDocuments()) === 0) || (await this.#needsSampleRefresh('money', 'sample_money'))) {
       await this.resetMoneySample();
     }
   }
@@ -309,7 +319,7 @@ export class AppDataRepository {
     const doc = await AppConnection.findByIdAndUpdate(
       id,
       { $set: { app, provider, sourceType, sourceName, config, itemCount, lastSyncedAt: new Date() } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     ).lean();
     return toConn(doc);
   }
@@ -488,7 +498,12 @@ export class AppDataRepository {
   }
 
   async deleteNote(id) {
-    return Note.findByIdAndDelete(id).lean();
+    const del = await Note.findByIdAndDelete(id).lean();
+    if (del?.connectionId) {
+      const count = await Note.countDocuments({ connectionId: del.connectionId });
+      await AppConnection.findByIdAndUpdate(del.connectionId, { $set: { itemCount: count } });
+    }
+    return del;
   }
 
   // --- Tasks ---
@@ -557,12 +572,17 @@ export class AppDataRepository {
     for (const k of ['title', 'due', 'list', 'status', 'notes']) {
       if (changes[k] !== undefined) allowed[k] = changes[k];
     }
-    const row = await Task.findByIdAndUpdate(id, { $set: allowed }, { new: true }).lean();
+    const row = await Task.findByIdAndUpdate(id, { $set: allowed }, { returnDocument: 'after' }).lean();
     return row ? toTask(row) : null;
   }
 
   async deleteTask(id) {
-    return Task.findByIdAndDelete(id).lean();
+    const del = await Task.findByIdAndDelete(id).lean();
+    if (del?.connectionId) {
+      const count = await Task.countDocuments({ connectionId: del.connectionId });
+      await AppConnection.findByIdAndUpdate(del.connectionId, { $set: { itemCount: count } });
+    }
+    return del;
   }
 
   // --- Money ---
@@ -627,6 +647,11 @@ export class AppDataRepository {
   }
 
   async deleteTransaction(id) {
-    return Transaction.findByIdAndDelete(id).lean();
+    const del = await Transaction.findByIdAndDelete(id).lean();
+    if (del?.connectionId) {
+      const count = await Transaction.countDocuments({ connectionId: del.connectionId });
+      await AppConnection.findByIdAndUpdate(del.connectionId, { $set: { itemCount: count } });
+    }
+    return del;
   }
 }

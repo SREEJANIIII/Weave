@@ -815,8 +815,14 @@ export function ConnectionsView({ initialApp = 'calendar', offline = false, onDa
                   {notesProvider === 'google_keep' && (
                     <div className="cn-keep-connect">
                       <div className="cn-oauth-hint">
-                        <span>ℹ️ Google Keep has no public OAuth API for personal Gmail accounts. Use Google Takeout to export your notes instead.</span>
+                        <span>ℹ️ Google restricts the Keep REST API to Workspace accounts. Connect Google Docs &amp; Drive via OAuth (in Keep, tap <em>⋮ → Copy to Google Docs</em>) or upload Keep Takeout <code>.json</code> files.</span>
                       </div>
+                      {oauthGoogle?.configured && (
+                        <a className="btn btn-primary btn-sm cn-oauth-btn" href="/api/oauth/google/notes/start">
+                          <Icon name="i-notes" />
+                          Connect Google Docs &amp; Drive
+                        </a>
+                      )}
                       <div className="cn-keep-steps">
                         <ol>
                           <li>Go to <strong>takeout.google.com</strong></li>
@@ -825,7 +831,7 @@ export function ConnectionsView({ initialApp = 'calendar', offline = false, onDa
                           <li>Upload the <code>.json</code> files below ↓</li>
                         </ol>
                       </div>
-                      <label className="cn-file-btn btn btn-primary btn-sm">
+                      <label className="cn-file-btn btn btn-outline btn-sm">
                         <Icon name="i-notes" />
                         <span>Upload Keep Takeout .json files</span>
                         <input

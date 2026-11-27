@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { normaliseExtraction, dedupeKey, parseDate } from '../lib/appliance-fields.js';
 import { expandRecurrence } from '../repositories/appliance-deadline-repository.js';
-import { verifyImageInput, VisionUnsupportedError, parseJsonObject } from '../lib/nvidia-vision.js';
+import { verifyImageInput, VisionUnsupportedError, parseJsonObject, extractFromText } from '../lib/nvidia-vision.js';
 import { connectDatabase, closeDatabase } from '../db/database.js';
 import { Appliance } from '../models/appliance.js';
 import { ApplianceDocument } from '../models/appliance-document.js';
@@ -67,6 +67,7 @@ assert.equal(dedupeKey({ brand: 'LG', model: 'F10M5' }), 'appliance:lg|f10m5');
 assert.equal(dedupeKey({}), null);
 assert.equal(parseDate('2025-02-31'), null);
 assert.deepEqual(parseJsonObject('```json\n{"a":1}\n```'), { a: 1 });
+assert.deepEqual(parseJsonObject('<think>considering {not json}</think>\n{"title":"Invoice","text":"line 1\nline 2",}'), { title: 'Invoice', text: 'line 1\nline 2' });
 console.log('  ✓ extraction flags missing, unclear and conflicting data without inventing values');
 
 // 2. Recurring EMI occurrences stay stable and skip past dates.
@@ -83,6 +84,23 @@ assert.equal(expandRecurrence({ ...emi, recurrence: null }, { today: '2026-11-27
 
 // 3. Image input is verified before use; a text-only model is rejected.
 const jsonResponse = (body, ok = true, status = 200) => ({ ok, status, text: async () => JSON.stringify(body) });
+let retryCalls = 0;
+const recovered = await extractFromText('Extract', 'doc', async () => {
+  retryCalls += 1;
+  if (retryCalls === 1) return jsonResponse({ choices: [{ finish_reason: 'length', message: { content: '{"title":"Partial' } }] });
+  return jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: '{"title":"Recovered","readable":true}' } }] });
+});
+assert.deepEqual(recovered, { title: 'Recovered', readable: true });
+assert.equal(retryCalls, 2);
+let jsonRepairCalls = 0;
+const repaired = await extractFromText('Extract', 'doc', async () => {
+  jsonRepairCalls += 1;
+  if (jsonRepairCalls === 1) return jsonResponse({ error: { message: 'response_format is unsupported' } }, false, 400);
+  if (jsonRepairCalls === 2) return jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: 'Not JSON at all' } }] });
+  return jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: '{"title":"Repaired","readable":true}' } }] });
+});
+assert.deepEqual(repaired, { title: 'Repaired', readable: true });
+assert.equal(jsonRepairCalls, 3);
 const probeCalls = [];
 const visionFetch = async (url, options) => {
   if (String(url).includes('/models/')) return jsonResponse({ id: 'test/vl', object: 'model' });

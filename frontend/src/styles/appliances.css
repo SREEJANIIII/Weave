@@ -1,5 +1,5 @@
 /* Appliances & Bills: upload, review and dashboard surface. Uses the app's existing tokens. */
-html[data-page="app"] .ap-shell { max-width: 1180px; margin: 0 auto; padding: calc(var(--bar-height) + var(--space-lg)) var(--space-lg) var(--space-3xl); display: grid; gap: var(--space-md); }
+html[data-page="app"] .ap-shell { max-width: 1180px; margin: 0 auto; padding: var(--space-lg) var(--space-lg) var(--space-3xl); display: grid; gap: var(--space-md); }
 html[data-page="app"] .ap-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); }
 html[data-page="app"] .ap-header h1 { font-size: var(--app-2xl); margin: 0 0 var(--space-xs); }
 html[data-page="app"] .ap-header p { margin: 0; max-width: 60ch; color: var(--color-ink-2); }

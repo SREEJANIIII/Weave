@@ -10,14 +10,16 @@ export function ownerHeaders() {
 }
 
 /** JSON helper for the Weave server. Never throws: a network failure comes back as { ok: false, network: true }. */
-export async function api(path, body) {
+export async function api(path, body, method) {
   try {
     const headers = ownerHeaders();
+    const resolvedMethod = method || (body === undefined ? 'GET' : 'POST');
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(
-      path,
-      body === undefined ? { headers } : { method: 'POST', headers, body: JSON.stringify(body) },
-    );
+    const res = await fetch(path, {
+      method: resolvedMethod,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, status: res.status, data };
   } catch {

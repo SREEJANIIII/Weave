@@ -23,7 +23,7 @@ assert.equal(proposals.length, 1);
 assert.equal(proposals[0].tool, 'create_task');
 assert.equal(proposals[0].args.title, 'Follow up');
 assert.equal(BASE_URL, 'https://integrate.api.nvidia.com/v1');
-assert.equal(MODEL, process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b');
+assert.equal(MODEL, process.env.NVIDIA_MODEL || process.env.WEAVE_MODEL || 'openai/gpt-oss-20b');
 const originalKey = process.env.NVIDIA_API_KEY;
 process.env.NVIDIA_API_KEY = 'test-only-not-a-real-key';
 assert.match(explainError(Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' })).message, /reach NVIDIA/i);
