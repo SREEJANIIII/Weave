@@ -1,5 +1,6 @@
-// Turns local text and calendar files into details for review. Appliance bills and warranties use
-// the dedicated Appliances & Bills page for server-side extraction.
+// Turns a file someone adds into details they can review. Calendar files and plain-text notes are read
+// in the browser. Photos and PDFs are read by NVIDIA NIM only when the person allows it.
+import { api } from './api';
 import { EMPTY_FIELDS, KINDS, isoOf } from './savedPapers';
 
 export const ACCEPT = 'image/*,application/pdf,.pdf,.ics,text/calendar,.txt,text/plain,.md';
@@ -115,6 +116,18 @@ export function readLocally(prepared) {
   if (prepared.text == null) return null;
   if (/calendar/.test(prepared.mediaType) || /\.ics$/i.test(prepared.fileName) || /BEGIN:VCALENDAR/.test(prepared.text)) return parseIcs(prepared.text);
   return parseText(prepared.text);
+}
+
+/** Ask the server to read a photo or PDF. Resolves to review details, or rejects with { message, hint }. */
+export async function readOnServer(prepared) {
+  const r = await api('/api/read-document', { data: prepared.payload, mediaType: prepared.mediaType, fileName: prepared.fileName });
+  if (!r.ok) throw { message: r.data?.error ?? 'Weave couldn’t read this file.', hint: r.data?.hint ?? '' };
+  const d = r.data.details;
+  if (!d.readable) throw { message: 'I couldn’t make out any details in this one.', hint: 'Try a sharper photo in good light, or type the details yourself.' };
+  const fields = { ...EMPTY_FIELDS };
+  for (const key of Object.keys(EMPTY_FIELDS)) if (typeof d[key] === 'string' && d[key]) fields[key] = d[key];
+  const kind = KINDS[d.kind] ? d.kind : 'other';
+  return { kind, title: d.title || suggestTitle(kind, fields), fields, unsure: (d.unsure ?? []).filter((k) => k in EMPTY_FIELDS), source: 'nvidia', content: r.data.content ?? null };
 }
 
 /** A starting point for typing details by hand, guessed from the file name only. */

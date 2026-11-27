@@ -287,9 +287,38 @@ export function findSaved(question, saved) {
  * Decide whether a question is about saved papers. Workout and event notes never claim a question on
  * their own (those go to Calendar first and are added alongside); receipts, warranties and bills do.
  */
+const SCHEDULE_Q = /\b(time\s*-?\s*table|timetable|routine|schedule|classes|class|lectures?|periods?|subjects?|courses?|college|school|university|labs?|books?|bring|carry|teach(es|er|ers)?|faculty|professor|sir|ma'?am)\b/i;
+const SCHEDULE_PAPER = /\b(time\s*-?\s*table|timetable|routine|schedule|class(es)?|lecture|period|subject|semester)\b/i;
+const DAY_Q = /\b(mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(day)?'?s?\b|\b(today|tomorrow|tmrw|tomorrows|yesterday|weekend)\b/i;
+
+/** How strongly a question's words appear in what was read from a paper (its text and tables). */
+function contentScore(item, question) {
+  const text = `${item.content?.text ?? ''} ${(item.content?.tables ?? []).map((t) => [t.title, ...(t.columns ?? []), ...(t.rows ?? []).flat()].join(' ')).join(' ')}`.toLowerCase();
+  if (!text.trim()) return 0;
+  const ts = terms(question).filter((t) => t.length > 2 && !DAY_Q.test(t));
+  return ts.filter((t) => {
+    const stem = t.length > 4 && t.endsWith('s') ? t.slice(0, -1) : t;
+    return new RegExp(`\\b${stem}`).test(text);
+  }).length;
+}
+
 export function savedIntent(question, saved) {
   const q = question.toLowerCase();
-  const matches = findSaved(question, saved);
+  let matches = findSaved(question, saved);
+  const read = saved.filter((it) => it.content?.text || it.content?.tables?.length);
+  const schedules = read.concat(saved.filter((it) => !read.includes(it))).filter((it) =>
+    SCHEDULE_PAPER.test(`${it.title} ${it.fields?.item ?? ''} ${(it.content?.text ?? '').slice(0, 600)}`),
+  );
+  // "Tomorrow's routine", "Monday classes", "subjects for Monday": a saved timetable answers these.
+  if (schedules.length && (SCHEDULE_Q.test(q) || (DAY_Q.test(q) && /\b(what|which|have|got|any|my)\b/.test(q) && !/meeting|calendar|event|appointment|call/.test(q)))) {
+    return { claims: true, matches: [...schedules, ...matches.filter((m) => !schedules.includes(m))], docWords: true };
+  }
+  // Anything else whose words clearly appear in the text Weave read from a paper.
+  const byContent = read.map((it) => ({ it, s: contentScore(it, question) })).filter((x) => x.s >= 2).sort((a, b) => b.s - a.s);
+  if (byContent.length) {
+    const top = byContent.map((x) => x.it);
+    return { claims: true, matches: [...top, ...matches.filter((m) => !top.includes(m))], docWords: true };
+  }
   const papers = matches.filter((it) => ['receipt', 'warranty', 'bill', 'other'].includes(it.kind));
   const docWords = DOC_RE.test(q);
   return { claims: docWords || papers.length > 0, matches: docWords ? matches : papers, docWords };
@@ -298,7 +327,7 @@ export function savedIntent(question, saved) {
 const sourceFor = (item, n) => ({
   source_id: `saved:${item.id}`,
   server: 'saved',
-  app: 'Saved on this device',
+  app: 'Saved papers',
   n,
   record: { kind: 'document', id: item.id, title: item.title, meta: summarize(item), snippet: item.fields?.notes ?? '' },
 });
@@ -314,7 +343,34 @@ function run(question, { headline, sections = [], caveats = [], items = [], unan
     savedItems: items.map((it) => it.id),
     showFirst: /\b(show|see|open|find|where)\b/i.test(question),
     unanswered,
-    answer: { headline, sections, caveats, sources, proposals: [], stats: { reads: 0, ms: 0, mode: 'local-saved', apps: ['Saved on this device'] } },
+    answer: { headline, sections, caveats, sources, proposals: [], stats: { reads: 0, ms: 0, mode: 'local-saved', apps: ['Saved papers'] } },
+  };
+}
+
+/** A turn built from the server's answer about one saved paper (headline, table, points). */
+export function answerRunFromPaper(item, data, question) {
+  const id = `saved:${item.id}`;
+  const points = (data.points ?? []).map((p) => ({ text: p.text, detail: p.detail ?? '', sourceIds: [id] }));
+  const caveats = [data.note, item.sample ? 'This is a sample paper that comes with the prototype.' : ''].filter(Boolean);
+  return {
+    question,
+    mode: 'local-saved',
+    steps: [],
+    proposals: [],
+    done: true,
+    savedItems: [item.id],
+    showFirst: false,
+    compactPaper: true,
+    unanswered: data.found === false,
+    answer: {
+      headline: data.headline,
+      sections: points.length ? [{ title: item.title, items: points }] : [],
+      table: data.table ?? null,
+      caveats,
+      sources: [sourceFor(item, 1)],
+      proposals: [],
+      stats: { reads: 1, ms: 0, mode: data.method === 'model' ? 'saved-paper (AI)' : 'saved-paper (search)', apps: ['Saved papers'] },
+    },
   };
 }
 
@@ -331,7 +387,7 @@ export function answerFromSaved(question, saved, { matches }) {
     if (ofKind.length) {
       return run(question, {
         headline: `You have ${ofKind.length} saved ${KINDS[kindAsked].label.toLowerCase()}${ofKind.length === 1 ? '' : 's'}.`,
-        sections: [{ title: 'Saved on this device', items: ofKind.map((it) => ({ text: it.title, detail: summarize(it), sourceIds: [`saved:${it.id}`] })) }],
+        sections: [{ title: 'Saved papers', items: ofKind.map((it) => ({ text: it.title, detail: summarize(it), sourceIds: [`saved:${it.id}`] })) }],
         items: ofKind,
       });
     }

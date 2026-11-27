@@ -7,7 +7,8 @@ import { isWardrobeQuestion } from '../lib/wardrobe-routing.js';
 import { isTimetableQuestion } from '../lib/timetable-routing.js';
 
 export const BASE_URL = 'https://integrate.api.nvidia.com/v1';
-export const MODEL = process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b';
+// The model comes from backend/.env: NVIDIA_MODEL, or WEAVE_MODEL, or this default.
+export const MODEL = process.env.NVIDIA_MODEL || process.env.WEAVE_MODEL || 'openai/gpt-oss-20b';
 export function hasCredentials() { return Boolean(process.env.NVIDIA_API_KEY); }
 export function createNvidiaClient() { return new OpenAI({ apiKey: process.env.NVIDIA_API_KEY, baseURL: BASE_URL, timeout: 30_000, maxRetries: 1 }); }
 
@@ -126,7 +127,7 @@ export function explainError(err) {
   if (!hasCredentials()) return { message: 'No NVIDIA credentials found.', hint: 'Set NVIDIA_API_KEY and restart, or switch the planner to Offline.' };
   const message = String(err?.message ?? 'Something went wrong.');
   if (/401|403|api key|authentication|permission/i.test(message)) return { message: "NVIDIA couldn't authenticate.", hint: 'Check NVIDIA_API_KEY and restart.' };
-  if (/404|model/i.test(message)) return { message: `NVIDIA model ${MODEL} was not found or is unavailable.`, hint: 'Set NVIDIA_MODEL to a model available in the NVIDIA API catalog.' };
+  if (/404|model/i.test(message)) return { message: `NVIDIA model ${MODEL} was not found or is unavailable.`, hint: 'Set WEAVE_MODEL (or NVIDIA_MODEL) in backend/.env to a model available in the NVIDIA API catalog.' };
   if (/429|rate/i.test(message)) return { message: 'NVIDIA is rate-limited right now.', hint: 'Wait a moment and ask again.' };
   if (/timeout|timed out|ETIMEDOUT|network|connect|fetch/i.test(message)) return { message: "Couldn't reach NVIDIA's API.", hint: 'Check your connection, or switch the planner to Offline.' };
   return { message: `NVIDIA API error${err?.status ? ` (${err.status})` : ''}.`, hint: message };

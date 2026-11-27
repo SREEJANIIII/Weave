@@ -17,7 +17,7 @@ import { TimetableView } from '../components/timetable/TimetableView';
 import { api } from '../lib/api';
 import { joinNames } from '../lib/services';
 import { STARTERS } from '../lib/followUps';
-import { answerFromSaved, savedIntent, withSavedNotes, workoutNotesForLastWeek } from '../lib/savedPapers';
+import { answerFromSaved, answerRunFromPaper, savedIntent, withSavedNotes, workoutNotesForLastWeek } from '../lib/savedPapers';
 import { matchOccasions } from '../lib/occasionMatcher';
 import { buildWishlistRunResponse, isWishlistQuery } from '../lib/wishlistContextQA';
 import { useWishlistStore } from '../hooks/useWishlistStore';
@@ -252,9 +252,29 @@ export function WorkspacePage({ routeView = null }) {
 
       // 1. Receipts, warranties and bills saved on this device.
       const intent = savedIntent(q, papers.saved);
-      const serverCanReadPapers = false;
-      if (intent.claims && (intent.matches.length || !serverCanReadPapers)) {
-        chats.addTurn({ seq, fresh: true, ...answerFromSaved(q, papers.saved, intent) });
+      const nvidiaCanLook = conn.status?.mode === 'nvidia' && !conn.offline;
+      if (intent.claims && (intent.matches.length || !nvidiaCanLook)) {
+        const paper = intent.matches[0];
+        const readable = paper && (paper.content?.text || paper.content?.tables?.length) && papers.onServer && !conn.offline;
+        if (!readable) {
+          chats.addTurn({ seq, fresh: true, ...answerFromSaved(q, papers.saved, intent) });
+          return;
+        }
+        // Answer from the text stored with the paper: specific to the question, as a table where it helps.
+        busyRef.current = true;
+        setBusy(true);
+        chats.addTurn({ seq, fresh: true, question: q, steps: [{ id: 1, kind: 'read', server: 'saved', app: 'Saved', tool: 'read_paper', status: 'running' }], proposals: [], answer: null, error: null, done: false });
+        const r = await api(`/api/papers/${encodeURIComponent(paper.id)}/answer`, { question: q });
+        chats.updateTurn(seq, (t) => ({
+          ...t,
+          ...(r.ok ? answerRunFromPaper(paper, r.data.answer, q) : answerFromSaved(q, papers.saved, intent)),
+          steps: [],
+          seq,
+          fresh: true,
+          done: true,
+        }));
+        busyRef.current = false;
+        setBusy(false);
         return;
       }
 
@@ -352,7 +372,7 @@ export function WorkspacePage({ routeView = null }) {
       setBusy(false);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [view, papers.saved, conn.status?.mode, conn.offline, wishlistState, store.wishlist, store.sizeProfile, store.occasions, store.reminderPrefs, chats.addTurn],
+    [view, papers.saved, papers.onServer, conn.status?.mode, conn.offline, wishlistState, store.wishlist, store.sizeProfile, store.occasions, store.reminderPrefs, chats.addTurn],
   );
 
   const voice = useVoice({ onFinal: (text) => ask(text) });
@@ -439,7 +459,7 @@ export function WorkspacePage({ routeView = null }) {
 
   const reset = async () => {
     store.resetWishlistDemo();
-    papers.restoreSamples();
+    await papers.restoreSamples();
     if (!conn.offline) {
       const r = await api('/api/reset', {});
       if (r.ok) await conn.resync(r.data);
@@ -464,17 +484,17 @@ export function WorkspacePage({ routeView = null }) {
 
   /* ---------- Saved papers ---------- */
 
-  const saveItem = (item) => {
-    const result = papers.add(item);
+  const saveItem = async (item) => {
+    const result = await papers.add(item);
     if (result.ok) setFreshId(item.id);
     return result;
   };
-  const undoSave = (id) => {
-    const r = papers.remove(id);
+  const undoSave = async (id) => {
+    const r = await papers.remove(id);
     showToast(r.ok ? 'Removed. That paper isn’t saved any more.' : 'Couldn’t remove it. It’s still in Saved.');
   };
-  const deleteItem = (item) => {
-    const r = papers.remove(item.id);
+  const deleteItem = async (item) => {
+    const r = await papers.remove(item.id);
     if (r.ok) showToast(`Deleted “${item.title}”.`, { label: 'Undo', run: () => papers.add(item) });
     else showToast('Couldn’t delete it. It’s still in Saved.');
   };
@@ -563,7 +583,18 @@ export function WorkspacePage({ routeView = null }) {
 
         <main className={`main-scroll${view !== 'home' ? ' is-page' : ''}`} id="main" ref={scrollRef}>
           {view === 'saved' ? (
-            <SavedPage saved={papers.saved} focusId={focus} freshId={freshId} onAsk={ask} onDelete={deleteItem} onAdd={openAddMenu} />
+            <SavedPage
+              saved={papers.saved}
+              focusId={focus}
+              freshId={freshId}
+              onAsk={ask}
+              onDelete={deleteItem}
+              onAdd={openAddMenu}
+              onReadText={async (item) => {
+                const r = await papers.readText(item.id);
+                showToast(r.ok ? `Read the text of “${item.title}”. You can ask about it now.` : r.error);
+              }}
+            />
           ) : view === 'connections' ? (
             <ConnectionsPage
               focusId={focus}
@@ -573,7 +604,17 @@ export function WorkspacePage({ routeView = null }) {
               pending={conn.pending}
               onConnect={connect}
               onDisconnect={disconnect}
+              onNotify={showToast}
+              onLinked={(id) => {
+                if (conn.services.find((x) => x.id === id)?.state === 'off') conn.setService(id, true);
+              }}
               onRetry={conn.reload}
+              reader={conn.status?.reader}
+              readerAllowed={conn.readerAllowed}
+              onSetReader={(allow) => {
+                conn.setReader(allow);
+                showToast(allow ? 'Weave will send photos you add to NVIDIA NIM to read them.' : 'Weave won’t send photos anywhere. You can type the details instead.');
+              }}
               techDetails={techDetails}
               activity={activity}
             />
@@ -682,6 +723,9 @@ export function WorkspacePage({ routeView = null }) {
       <UploadSheet
         job={uploadJob}
         onClose={() => setUploadJob(null)}
+        reader={conn.status?.reader}
+        readerAllowed={conn.readerAllowed}
+        onAllowReader={() => conn.setReader(true)}
         onSave={saveItem}
         onUndoSave={undoSave}
         onAsk={ask}

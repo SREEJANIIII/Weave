@@ -71,7 +71,7 @@ function SettingsMenu({ busy, techDetails, onToggleTech, onReset, onClearHistory
               <>
                 <p>
                   {confirming === 'reset'
-                    ? 'This brings back the sample data and removes anything you saved on this device.'
+                    ? 'This brings back the sample data and removes papers you saved.'
                     : 'This deletes every conversation in the sidebar. Saved papers stay.'}
                 </p>
                 <div className="row-actions">

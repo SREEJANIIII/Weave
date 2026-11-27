@@ -23,7 +23,22 @@ import {
   refreshGoogleToken,
 } from '../../lib/connectors.js';
 
-const OAUTH_STATES = new Map(); // state -> createdAt
+const OAUTH_STATES = new Map(); // state -> { createdAt, returnTo }
+
+/** Where to send the person after Google sign-in: only this machine's Weave or its Vite dev server. */
+function safeReturn(origin) {
+  const port = Number(process.env.PORT) || 4321;
+  const allowed = [`http://localhost:${port}`, `http://127.0.0.1:${port}`, 'http://localhost:5173', 'http://127.0.0.1:5173'];
+  return allowed.includes(String(origin ?? '')) ? String(origin) : '';
+}
+
+/** Read and forget an OAuth state; returns null when it is unknown or older than 10 minutes. */
+function takeState(state) {
+  const entry = OAUTH_STATES.get(String(state ?? ''));
+  OAUTH_STATES.delete(String(state ?? ''));
+  if (!entry || Date.now() - entry.createdAt > 10 * 60 * 1000) return null;
+  return entry;
+}
 
 const EXTERNAL_CONNECTORS = [
   {
@@ -502,7 +517,7 @@ export function createConnectionsRouter({ appData }) {
       });
     }
     const state = crypto.randomBytes(16).toString('hex');
-    OAUTH_STATES.set(state, Date.now());
+    OAUTH_STATES.set(state, { createdAt: Date.now(), returnTo: safeReturn(req.query.return) });
     const keepRedirectUri = cfg.redirectUri.replace('/callback', '/keep/callback');
     const authUrl = createGoogleKeepAuthUrl({ clientId: cfg.clientId, redirectUri: keepRedirectUri, state });
     if (req.query.format === 'json') return res.json({ authUrl });
@@ -511,11 +526,10 @@ export function createConnectionsRouter({ appData }) {
 
   router.get('/oauth/google/keep/callback', async (req, res) => {
     const { code, state, error } = req.query;
-    if (error) return res.redirect(`/app/connections?app=notes&oauth_error=${encodeURIComponent(String(error))}`);
-    if (!code || !state || !OAUTH_STATES.has(String(state))) {
-      return res.redirect('/app/connections?app=notes&oauth_error=invalid_state');
-    }
-    OAUTH_STATES.delete(String(state));
+    const entry = takeState(state);
+    const back = entry?.returnTo ?? '';
+    if (error) return res.redirect(`${back}/app/connections?app=notes&oauth_error=${encodeURIComponent(String(error))}`);
+    if (!code || !entry) return res.redirect(`${back}/app/connections?app=notes&oauth_error=invalid_state`);
     const cfg = getGoogleOAuthConfig();
     const keepRedirectUri = cfg.redirectUri.replace('/callback', '/keep/callback');
     try {
@@ -535,9 +549,9 @@ export function createConnectionsRouter({ appData }) {
         config: { encryptedTokens },
         replaceAll: false,
       });
-      return res.redirect(`/app/connections?app=notes&connected=google_keep&notes=${notes.length}`);
+      return res.redirect(`${back}/app/connections?app=notes&connected=google_keep&notes=${notes.length}`);
     } catch (err) {
-      return res.redirect(`/app/connections?app=notes&oauth_error=${encodeURIComponent(err.message || 'keep_oauth_failed')}`);
+      return res.redirect(`${back}/app/connections?app=notes&oauth_error=${encodeURIComponent(err.message || 'keep_oauth_failed')}`);
     }
   });
 
@@ -554,7 +568,7 @@ export function createConnectionsRouter({ appData }) {
       });
     }
     const state = crypto.randomBytes(16).toString('hex');
-    OAUTH_STATES.set(state, Date.now());
+    OAUTH_STATES.set(state, { createdAt: Date.now(), returnTo: safeReturn(req.query.return) });
     const authUrl = createGoogleAuthUrl({ clientId: cfg.clientId, redirectUri: cfg.redirectUri, state });
     if (req.query.format === 'json') return res.json({ authUrl });
     return res.redirect(authUrl);
@@ -562,11 +576,10 @@ export function createConnectionsRouter({ appData }) {
 
   router.get('/oauth/google/callback', async (req, res) => {
     const { code, state, error } = req.query;
-    if (error) return res.redirect(`/app/connections?app=calendar&oauth_error=${encodeURIComponent(String(error))}`);
-    if (!code || !state || !OAUTH_STATES.has(String(state))) {
-      return res.redirect('/app/connections?app=calendar&oauth_error=invalid_state');
-    }
-    OAUTH_STATES.delete(String(state));
+    const entry = takeState(state);
+    const back = entry?.returnTo ?? '';
+    if (error) return res.redirect(`${back}/app/connections?app=calendar&oauth_error=${encodeURIComponent(String(error))}`);
+    if (!code || !entry) return res.redirect(`${back}/app/connections?app=calendar&oauth_error=invalid_state`);
     const cfg = getGoogleOAuthConfig();
     try {
       const tokens = await exchangeGoogleCode({
@@ -596,9 +609,9 @@ export function createConnectionsRouter({ appData }) {
           config: { encryptedTokens },
         });
       }
-      return res.redirect(`/app/connections?app=calendar&connected=google&events=${events.length}&tasks=${tasks.length}`);
+      return res.redirect(`${back}/app/connections?app=calendar&connected=google&events=${events.length}&tasks=${tasks.length}`);
     } catch (err) {
-      return res.redirect(`/app/connections?app=calendar&oauth_error=${encodeURIComponent(err.message || 'oauth_failed')}`);
+      return res.redirect(`${back}/app/connections?app=calendar&oauth_error=${encodeURIComponent(err.message || 'oauth_failed')}`);
     }
   });
 

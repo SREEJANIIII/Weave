@@ -81,6 +81,7 @@ export function joinNames(names) {
 }
 
 const STEP_COPY = {
+  read_paper: 'Reading your saved paper',
   list_events: 'Looking at your calendar',
   get_event: 'Looking at your calendar',
   find_free_slots: 'Finding free time in your calendar',

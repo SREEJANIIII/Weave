@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '../Icons';
 import { Sheet } from './Sheet';
 import { FIELD_LABELS, FIELD_TYPES, KINDS, imageFor, nounFor, sampleUpload, summarize } from '../../lib/savedPapers';
-import { blankDetails, prepareFile, readLocally, suggestTitle } from '../../lib/readFile';
+import { blankDetails, prepareFile, readLocally, readOnServer, suggestTitle } from '../../lib/readFile';
 
 const KIND_ORDER = ['receipt', 'warranty', 'bill', 'event', 'workout', 'other'];
 
@@ -10,10 +10,13 @@ function bannerFor(source, reason, unsureCount) {
   if (source === 'sample') {
     return { tone: 'info', text: `This is a sample receipt with made-up details, filled in the way Weave would read it. ${unsureCount ? 'Fix the field marked “Check this”, then save it.' : 'Check the details, then save it.'}` };
   }
+  if (source === 'nvidia') {
+    return { tone: 'ok', text: `I read this. Check the details and fix anything I got wrong.${unsureCount ? ` I wasn’t sure about ${unsureCount === 1 ? 'the field' : 'the fields'} marked “Check this”.` : ''}` };
+  }
   if (source === 'file') return { tone: 'ok', text: 'I read this file. Check the details before you save it.' };
   if (reason === 'declined') return { tone: 'info', text: 'Okay, I won’t send it anywhere. Add the details you’d like to keep; even a name and a date helps.' };
   if (reason === 'unavailable') return { tone: 'info', text: 'I can’t read photos in this setup, so nothing is filled in yet. Add the details you’d like to keep; even a name and a date helps.' };
-  if (reason === 'offline') return { tone: 'info', text: 'Weave’s server is out of reach. Add the details you’d like to keep; even a name and a date helps.' };
+  if (reason === 'offline') return { tone: 'info', text: 'Weave’s server is out of reach, so I can’t read this right now. Add the details you’d like to keep; even a name and a date helps.' };
   if (reason?.message) return { tone: 'warn', text: `${reason.message} ${reason.hint ?? ''}`.trim() };
   return { tone: 'info', text: 'Add the details you’d like to keep.' };
 }
@@ -40,7 +43,7 @@ function Stitch() {
   );
 }
 
-export function UploadSheet({ job, onClose, onSave, onUndoSave, onAsk, onOpenSaved, onNotSaved }) {
+export function UploadSheet({ job, onClose, reader, readerAllowed, onAllowReader, onSave, onUndoSave, onAsk, onOpenSaved, onNotSaved }) {
   const [phase, setPhase] = useState('idle'); // preparing | consent | reading | review | saving | saved
   const [prepared, setPrepared] = useState(null);
   const [draft, setDraft] = useState(null); // { kind, title, fields, unsure, source }
@@ -57,6 +60,15 @@ export function UploadSheet({ job, onClose, onSave, onUndoSave, onAsk, onOpenSav
     setReason(why);
     setPhase('review');
     requestAnimationFrame(() => titleRef.current?.focus());
+  };
+
+  const read = async (prep, run = runRef.current) => {
+    setPhase('reading');
+    try {
+      toReview(await readOnServer(prep), null, run);
+    } catch (err) {
+      toReview(blankDetails(prep), err, run);
+    }
   };
 
   useEffect(() => {
@@ -87,10 +99,10 @@ export function UploadSheet({ job, onClose, onSave, onUndoSave, onAsk, onOpenSav
             : 'unavailable';
         return toReview(blankDetails(prep), why, run);
       }
-      return toReview(blankDetails(prep), {
-        message: 'For automatic bill and warranty extraction, open Appliances & Bills.',
-        hint: 'You can still save this paper here by entering its details manually.',
-      }, run);
+      if (!reader) return toReview(blankDetails(prep), 'offline', run);
+      if (!reader.available) return toReview(blankDetails(prep), 'unavailable', run);
+      if (!readerAllowed) return setPhase('consent');
+      return read(prep, run);
     })();
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,7 +123,7 @@ export function UploadSheet({ job, onClose, onSave, onUndoSave, onAsk, onOpenSav
     setDraft((d) => ({ ...d, fields: { ...d.fields, [key]: value }, unsure: d.unsure.filter((k) => k !== key) }));
   };
 
-  const save = () => {
+  const save = async () => {
     const title = (draft.title || suggestTitle(draft.kind, draft.fields)).trim();
     if (!title) {
       setTitleError('Give it a name so you can find it later.');
@@ -129,8 +141,11 @@ export function UploadSheet({ job, onClose, onSave, onUndoSave, onAsk, onOpenSav
       source: draft.source,
       sample: draft.source === 'sample',
       savedAt: new Date().toISOString(),
+      // The full photo/PDF and everything read from it, so later questions can be answered from the text.
+      original: prepared?.payload && /^(image\/(jpeg|png)|application\/pdf)$/.test(prepared.mediaType ?? '') ? { data: prepared.payload, mediaType: prepared.mediaType } : null,
+      content: draft.content ?? null,
     };
-    const result = onSave(item);
+    const result = await onSave(item);
     if (!result.ok) {
       setSaveError(`${result.error} Nothing was saved.`);
       setPhase('review');
@@ -158,7 +173,7 @@ export function UploadSheet({ job, onClose, onSave, onUndoSave, onAsk, onOpenSav
         phase === 'review' || phase === 'saving' ? (
           <>
             <p className="fine">
-              <Icon name="i-lock" /> Saved papers stay in this browser.
+              <Icon name="i-lock" /> Saved papers are kept in your Weave database, not shared.
             </p>
             <div className="row-actions">
               <button className="d-btn is-plain" type="button" onClick={close}>
@@ -212,6 +227,21 @@ export function UploadSheet({ job, onClose, onSave, onUndoSave, onAsk, onOpenSav
           </div>
         )}
 
+        {phase === 'consent' && (
+          <div className="upload-side">
+            <p className="consent-q">Should Weave send this to NVIDIA NIM to read it?</p>
+            <p>NVIDIA NIM reads the photo and fills in the details for you to check. Nothing is saved until you say so. You can change this any time in Connections.</p>
+            <div className="row-actions">
+              <button className="d-btn is-ink" type="button" onClick={() => { onAllowReader(); read(prepared, runRef.current); }}>
+                Yes, read it
+              </button>
+              <button className="d-btn is-line" type="button" onClick={() => toReview(blankDetails(prepared), 'declined')}>
+                I’ll type the details
+              </button>
+            </div>
+          </div>
+        )}
+
         {(phase === 'review' || phase === 'saving') && draft && (
           <div className="upload-side">
             <p className={`banner is-${banner.tone}`}>
@@ -222,6 +252,16 @@ export function UploadSheet({ job, onClose, onSave, onUndoSave, onAsk, onOpenSav
               <p className="banner is-warn" role="alert">
                 <Icon name="i-alert" />
                 <span>{saveError}</span>
+              </p>
+            ) : null}
+
+            {draft.content?.text || draft.content?.tables?.length ? (
+              <p className="banner is-info">
+                <Icon name="i-file" />
+                <span>
+                  Weave also read the full text
+                  {draft.content.tables?.length ? ` and ${draft.content.tables.length} table${draft.content.tables.length === 1 ? '' : 's'}` : ''}. It’s saved with this paper, so you can ask things like “What’s on Monday?”
+                </span>
               </p>
             ) : null}
 
@@ -296,7 +336,7 @@ export function UploadSheet({ job, onClose, onSave, onUndoSave, onAsk, onOpenSav
               </span>
             </div>
             <p className="saved-line" role="status">
-              <strong>Saved on this device.</strong> Find it any time under <em>Saved</em> at the top of the page{questionFor(savedItem) ? ', or just ask:' : '.'}
+              <strong>Saved.</strong> Find it any time under <em>Saved</em> at the top of the page{questionFor(savedItem) ? ', or just ask:' : '.'}
             </p>
             {questionFor(savedItem) && (
               <button

@@ -240,6 +240,18 @@ html[data-page="dashboard"] body, body:has(> #root > .shell), body:has(.shell) {
 .composer.is-docked .ask-under { padding-top: 6px; }
 .weave-swatch { display: inline-block; flex-shrink: 0; width: 22px; height: 10px; border-radius: 3px; background: var(--swatch); box-shadow: inset 0 0 0 1px oklch(19% 0.006 85 / 0.08); }
 
+/* Tables in answers (e.g. one day of a timetable) */
+.a-table { margin: 18px 0 0; }
+.a-table figcaption { margin-bottom: 8px; color: var(--d-quiet); font: 600 0.84375rem/1.4 var(--font-body); }
+.a-table-scroll { overflow-x: auto; border: 1px solid var(--d-line); border-radius: 14px; background: var(--d-raise); }
+.a-table table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.a-table th, .a-table td { padding: 11px 16px; border-bottom: 1px solid var(--d-line); text-align: left; vertical-align: top; }
+.a-table tbody tr:last-child > * { border-bottom: 0; }
+.a-table thead th { background: var(--d-sunk); color: var(--d-ink-2); font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
+.a-table tbody th { color: var(--d-ink-2); font-weight: 600; white-space: nowrap; }
+.a-table tbody tr:hover > * { background: color-mix(in oklab, var(--d-sunk) 60%, transparent); }
+.a-table-empty { color: var(--d-quiet); }
+
 /* Letter-by-letter answers */
 .caret { display: inline-block; width: 0.55em; height: 0.55em; margin-left: 3px; border-radius: 50%; background: var(--d-ink); vertical-align: 0.05em; animation: d-blink 900ms ease-in-out infinite; }
 @keyframes d-blink { 50% { opacity: 0.25; transform: scale(0.8); } }
@@ -439,6 +451,19 @@ span.prow-text { cursor: default; }
 .prow-detail strong { color: var(--d-ink); font-weight: 600; }
 .prow-detail .row-actions { margin-top: 12px; }
 
+.prow-links { display: grid; gap: 10px; margin: -4px 0 16px 54px; }
+.link-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.link-actions .d-btn .icon { width: 16px; height: 16px; }
+.linked { display: grid; gap: 2px; margin: 0; padding: 4px 4px 4px 12px; border-radius: 12px; background: var(--d-sunk); list-style: none; }
+.linked li { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.linked li > .icon { width: 15px; height: 15px; color: var(--d-ok); }
+.linked-text { display: grid; flex: 1; min-width: 0; gap: 1px; font-size: 0.875rem; }
+.linked-text strong { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.linked-text span { color: var(--d-quiet); font-size: 0.8125rem; }
+.linked .text-btn { height: 32px; padding: 0 10px; font-size: 0.8125rem; }
+.link-note { display: flex; align-items: flex-start; gap: 8px; color: var(--d-ink-2); font-size: 0.84375rem; line-height: 1.5; }
+.link-note .icon { width: 16px; height: 16px; margin-top: 2px; color: var(--d-quiet); }
+@media (max-width: 47.99rem) { .prow-links { margin-left: 0; } }
 .switch { position: relative; flex-shrink: 0; width: 44px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: var(--d-line-strong); cursor: pointer; transition: background var(--dur-short) var(--ease-out); }
 .switch span { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--d-raise); box-shadow: 0 1px 2px oklch(19% 0.006 85 / 0.3); transition: transform var(--dur-short) var(--ease-out); }
 .switch.is-on { background: var(--d-ink); }
@@ -613,3 +638,9 @@ span.prow-text { cursor: default; }
   .sheet-foot .fine { width: 100%; }
   .sheet-foot .row-actions { width: 100%; justify-content: flex-end; }
 }
+
+/* What Weave read from a saved paper */
+.srow-read { display: grid; gap: 10px; }
+.srow-read summary { width: fit-content; color: var(--d-ink-2); font-size: 0.875rem; font-weight: 500; cursor: pointer; }
+.srow-read pre { max-height: 260px; margin: 0; padding: 12px 14px; overflow: auto; border-radius: 10px; background: var(--d-sunk); color: var(--d-ink-2); font: 400 0.8125rem/1.55 var(--font-body); white-space: pre-wrap; }
+.srow-read .a-table { margin-top: 4px; }
