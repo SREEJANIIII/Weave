@@ -127,7 +127,7 @@ export async function readOnServer(prepared) {
   const fields = { ...EMPTY_FIELDS };
   for (const key of Object.keys(EMPTY_FIELDS)) if (typeof d[key] === 'string' && d[key]) fields[key] = d[key];
   const kind = KINDS[d.kind] ? d.kind : 'other';
-  return { kind, title: d.title || suggestTitle(kind, fields), fields, unsure: (d.unsure ?? []).filter((k) => k in EMPTY_FIELDS), source: 'nvidia' };
+  return { kind, title: d.title || suggestTitle(kind, fields), fields, unsure: (d.unsure ?? []).filter((k) => k in EMPTY_FIELDS), source: 'nvidia', content: r.data.content ?? null };
 }
 
 /** A starting point for typing details by hand, guessed from the file name only. */

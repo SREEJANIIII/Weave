@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Icon } from '../Icons';
+import { AnswerTable } from './Turn';
 import { FIELD_LABELS, KINDS, fmtDate, fmtMoney, imageFor, nounFor, summarize } from '../../lib/savedPapers';
 
 const SOURCE_TEXT = {
@@ -34,7 +35,10 @@ function valueFor(key, f) {
   return f[key];
 }
 
-function Row({ item, open, fresh, onToggle, onAsk, onDelete }) {
+function Row({ item, open, fresh, onToggle, onAsk, onDelete, onReadText }) {
+  const [reading, setReading] = useState(false);
+  const tables = item.content?.tables ?? [];
+  const text = item.content?.text ?? '';
   const ref = useRef(null);
   const img = imageFor(item);
   const labels = FIELD_LABELS[item.kind] ?? FIELD_LABELS.other;
@@ -75,6 +79,35 @@ function Row({ item, open, fresh, onToggle, onAsk, onDelete }) {
                 ) : null;
               })}
             </dl>
+            {text || tables.length ? (
+              <details className="srow-read">
+                <summary>
+                  What Weave read{tables.length ? ` · ${tables.length} table${tables.length === 1 ? '' : 's'}` : ''}
+                  {text ? ` · ${text.split('\n').filter(Boolean).length} lines` : ''}
+                </summary>
+                {tables.map((t, i) => (
+                  <AnswerTable key={i} table={t} />
+                ))}
+                {text ? <pre>{text}</pre> : null}
+              </details>
+            ) : item.hasOriginal ? (
+              <div className="row-actions">
+                <button
+                  type="button"
+                  className="d-btn is-line is-sm"
+                  disabled={reading}
+                  onClick={async () => {
+                    setReading(true);
+                    await onReadText(item);
+                    setReading(false);
+                  }}
+                >
+                  {reading ? <span className="spin" aria-hidden="true" /> : <Icon name="i-file" />}
+                  {reading ? 'Reading…' : 'Read the text'}
+                </button>
+                <span className="fine">So you can ask about anything on it</span>
+              </div>
+            ) : null}
             {item.imageDropped ? <p className="fine">The photo wasn’t kept because this browser was out of room. The details are saved.</p> : null}
             <p className="fine">
               Saved {fmtDate(item.savedAt?.slice(0, 10))} · {SOURCE_TEXT[item.source] ?? 'Saved by you'}
@@ -97,7 +130,7 @@ function Row({ item, open, fresh, onToggle, onAsk, onDelete }) {
   );
 }
 
-export function SavedPage({ saved, focusId, freshId, onAsk, onDelete, onAdd }) {
+export function SavedPage({ saved, focusId, freshId, onAsk, onDelete, onAdd, onReadText }) {
   const [openId, setOpenId] = useState(focusId ?? null);
   const [filter, setFilter] = useState('all');
 
@@ -117,7 +150,7 @@ export function SavedPage({ saved, focusId, freshId, onAsk, onDelete, onAdd }) {
       <header className="page-head has-action">
         <div>
           <h1>Saved</h1>
-          <p>Receipts, warranties and notes you’ve added. They stay on this device, and you can ask about any of them.</p>
+          <p>Receipts, warranties and notes you’ve added. Weave keeps them, with the text it read, so you can ask about any of them.</p>
         </div>
         <button className="d-btn is-ink is-sm" type="button" onClick={onAdd}>
           <Icon name="i-plus" />
@@ -158,6 +191,7 @@ export function SavedPage({ saved, focusId, freshId, onAsk, onDelete, onAdd }) {
               onToggle={() => setOpenId((cur) => (cur === it.id ? null : it.id))}
               onAsk={onAsk}
               onDelete={onDelete}
+              onReadText={onReadText}
             />
           ))}
         </ul>

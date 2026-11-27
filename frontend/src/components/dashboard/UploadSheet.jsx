@@ -123,7 +123,7 @@ export function UploadSheet({ job, onClose, reader, readerAllowed, onAllowReader
     setDraft((d) => ({ ...d, fields: { ...d.fields, [key]: value }, unsure: d.unsure.filter((k) => k !== key) }));
   };
 
-  const save = () => {
+  const save = async () => {
     const title = (draft.title || suggestTitle(draft.kind, draft.fields)).trim();
     if (!title) {
       setTitleError('Give it a name so you can find it later.');
@@ -141,8 +141,11 @@ export function UploadSheet({ job, onClose, reader, readerAllowed, onAllowReader
       source: draft.source,
       sample: draft.source === 'sample',
       savedAt: new Date().toISOString(),
+      // The full photo/PDF and everything read from it, so later questions can be answered from the text.
+      original: prepared?.payload && /^(image\/(jpeg|png)|application\/pdf)$/.test(prepared.mediaType ?? '') ? { data: prepared.payload, mediaType: prepared.mediaType } : null,
+      content: draft.content ?? null,
     };
-    const result = onSave(item);
+    const result = await onSave(item);
     if (!result.ok) {
       setSaveError(`${result.error} Nothing was saved.`);
       setPhase('review');
@@ -170,7 +173,7 @@ export function UploadSheet({ job, onClose, reader, readerAllowed, onAllowReader
         phase === 'review' || phase === 'saving' ? (
           <>
             <p className="fine">
-              <Icon name="i-lock" /> Saved papers stay in this browser.
+              <Icon name="i-lock" /> Saved papers are kept in your Weave database, not shared.
             </p>
             <div className="row-actions">
               <button className="d-btn is-plain" type="button" onClick={close}>
@@ -252,6 +255,16 @@ export function UploadSheet({ job, onClose, reader, readerAllowed, onAllowReader
               </p>
             ) : null}
 
+            {draft.content?.text || draft.content?.tables?.length ? (
+              <p className="banner is-info">
+                <Icon name="i-file" />
+                <span>
+                  Weave also read the full text
+                  {draft.content.tables?.length ? ` and ${draft.content.tables.length} table${draft.content.tables.length === 1 ? '' : 's'}` : ''}. It’s saved with this paper, so you can ask things like “What’s on Monday?”
+                </span>
+              </p>
+            ) : null}
+
             <fieldset className="kinds">
               <legend>What is it?</legend>
               <div className="segmented">
@@ -323,7 +336,7 @@ export function UploadSheet({ job, onClose, reader, readerAllowed, onAllowReader
               </span>
             </div>
             <p className="saved-line" role="status">
-              <strong>Saved on this device.</strong> Find it any time under <em>Saved</em> at the top of the page{questionFor(savedItem) ? ', or just ask:' : '.'}
+              <strong>Saved.</strong> Find it any time under <em>Saved</em> at the top of the page{questionFor(savedItem) ? ', or just ask:' : '.'}
             </p>
             {questionFor(savedItem) && (
               <button

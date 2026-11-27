@@ -12,6 +12,50 @@ const to12 = (hhmm) => {
 };
 const timeRange = (a, b) => (a && b ? `${to12(a)}–${to12(b)}` : to12(a));
 
+// Models sometimes answer in Markdown; the dashboard shows plain sentences.
+const plain = (t) => String(t ?? '').replace(/\*\*|__|`/g, '').replace(/^#+\s*/gm, '').trim();
+
+/** A table in an answer, e.g. one day of a timetable. */
+export function AnswerTable({ table }) {
+  const columns = (table.columns ?? []).map(plain);
+  const width = Math.max(columns.length, ...table.rows.map((r) => r.length));
+  return (
+    <figure className="a-table">
+      {table.title ? <figcaption>{plain(table.title)}</figcaption> : null}
+      <div className="a-table-scroll">
+        <table>
+          {columns.some(Boolean) && (
+            <thead>
+              <tr>
+                {Array.from({ length: width }, (_, i) => (
+                  <th key={i} scope="col">
+                    {columns[i] ?? ''}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+          )}
+          <tbody>
+            {table.rows.map((row, ri) => (
+              <tr key={ri}>
+                {Array.from({ length: width }, (_, i) =>
+                  i === 0 ? (
+                    <th key={i} scope="row">
+                      {plain(row[i])}
+                    </th>
+                  ) : (
+                    <td key={i}>{plain(row[i]) || <span className="a-table-empty">–</span>}</td>
+                  ),
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </figure>
+  );
+}
+
 function describe(record) {
   if (record.kind === 'document') return { title: record.title, meta: record.meta, snippet: record.snippet };
   return describeRecord(record);
@@ -226,10 +270,10 @@ export function Turn({
     const list = [];
     const index = { sections: [] };
     if (!answer) return { parts: list, partIndex: index };
-    index.head = list.push(answer.headline || 'Here’s what I found.') - 1;
+    index.head = list.push(plain(answer.headline) || 'Here’s what I found.') - 1;
     for (const sec of answer.sections) {
-      const entry = { title: list.push(sec.title) - 1, items: [] };
-      for (const it of sec.items) entry.items.push({ text: list.push(it.text) - 1, detail: list.push(it.detail || '') - 1 });
+      const entry = { title: list.push(plain(sec.title)) - 1, items: [] };
+      for (const it of sec.items) entry.items.push({ text: list.push(plain(it.text)) - 1, detail: list.push(plain(it.detail)) - 1 });
       index.sections.push(entry);
     }
     return { parts: list, partIndex: index };
@@ -278,7 +322,7 @@ export function Turn({
   };
 
   const paperCards = savedItems.length > 0 && (
-                <div className={`paper-cards${savedItems.length === 1 ? ' is-single' : ''}`}>
+                <div className={`paper-cards${savedItems.length === 1 && !turn.compactPaper ? ' is-single' : ''}`}>
                   {savedItems.map((it) => {
                     const img = imageFor(it);
                     return (
@@ -463,6 +507,7 @@ export function Turn({
 
               {!typing && (
               <div className="a-rest">
+              {answer.table?.rows?.length ? <AnswerTable table={answer.table} /> : null}
               {!turn.showFirst && paperCards}
 
               {turn.highlightedProducts?.length > 0 && (
@@ -521,7 +566,7 @@ export function Turn({
                     {usedServers.map((id) => (
                       <span key={id} className="chip-service">
                         <span className="yarn-dot" data-yarn={id} aria-hidden="true" />
-                        {id === 'saved' ? 'saved papers (this device)' : serviceName(id)}
+                        {id === 'saved' ? 'saved papers' : serviceName(id)}
                       </span>
                     ))}
                   </p>

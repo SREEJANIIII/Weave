@@ -4,6 +4,7 @@ import { extractSource } from '../lib/document-pipeline.js';
 import { extractFromImages, extractFromText, VISION_MODEL } from '../lib/nvidia-vision.js';
 import { hasCredentials } from './agent-nvidia.js';
 import { now, isoDate } from '../lib/dates.js';
+import { cleanContent } from '../repositories/saved-paper-repository.js';
 
 export const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 export const READABLE_TYPES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
@@ -13,8 +14,10 @@ const KINDS = new Set(['receipt', 'warranty', 'bill', 'event', 'workout', 'other
 function promptFor(fileName) {
   return `Read this photo or PDF for Weave, a personal assistant. Today is ${isoDate(now())}.
 Return one JSON object only with this exact shape:
-{"readable":true,"kind":"receipt|warranty|bill|event|workout|other","title":"short useful title","item":"","merchant":"","date":"YYYY-MM-DD or empty","amount":"digits and optional decimal or empty","currency":"ISO currency code or empty","warranty_until":"YYYY-MM-DD or empty","due_date":"YYYY-MM-DD or empty","time":"HH:MM or empty","place":"","reference":"","notes":"","unsure":[]}
+{"readable":true,"kind":"receipt|warranty|bill|event|workout|other","title":"short useful title","item":"","merchant":"","date":"YYYY-MM-DD or empty","amount":"digits and optional decimal or empty","currency":"ISO currency code or empty","warranty_until":"YYYY-MM-DD or empty","due_date":"YYYY-MM-DD or empty","time":"HH:MM or empty","place":"","reference":"","notes":"","unsure":[],"text":"","tables":[{"title":"","columns":[],"rows":[[]]}]}
 Rules:
+- "text": transcribe ALL readable text in the document, in reading order, one line per printed line (use \n). Include headings, legends, footnotes and names.
+- "tables": transcribe EVERY table completely. "columns" is the header row; each entry of "rows" is one table row with its cells in column order. If a cell spans several columns, repeat its value in each. Keep codes, times and room numbers exactly as printed. For a timetable, keep one row per day (or per time slot) exactly as laid out.
 - Copy only information visible in the document. Never guess or invent values. Leave missing fields empty.
 - Use a date only when the full date is visible. Do not infer a year from today's date.
 - Set readable to false if the document is blank, unreadable, or not a useful personal record.
@@ -73,11 +76,18 @@ export async function readDocument({ data, mediaType, fileName = '' }) {
     throw Object.assign(new Error('That file is empty or too big to read (8 MB at most).'), { status: 413 });
   }
 
-  const source = await extractSource({ buffer, mimeType: mediaType, kind: 'other' });
+  // Photos go straight to the vision model: it keeps a timetable's grid, which plain OCR flattens.
+  const source = await extractSource({ buffer, mimeType: mediaType, kind: mediaType === 'application/pdf' ? 'other' : 'handwritten' });
   const prompt = promptFor(fileName);
   const raw = source.images.length
     ? await extractFromImages(prompt, source.images)
     : await extractFromText(prompt, source.text);
   const details = cleanDetails(raw);
-  return { details, model: VISION_MODEL, method: source.method, warnings: source.warnings };
+  // Everything read from the document, kept with the paper so later questions can be answered from it.
+  const content = cleanContent({
+    text: typeof raw.text === 'string' && raw.text.trim() ? raw.text : source.text ?? '',
+    tables: raw.tables,
+    method: source.method,
+  });
+  return { details, content, model: VISION_MODEL, method: source.method, warnings: source.warnings };
 }

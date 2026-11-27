@@ -4,7 +4,7 @@
 // never a silent text-only substitute.
 export const DEFAULT_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 export const BASE_URL = (process.env.NVIDIA_NIM_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
-export const VISION_MODEL = process.env.NVIDIA_VISION_MODEL || process.env.NVIDIA_MODEL || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
+export const VISION_MODEL = process.env.NVIDIA_VISION_MODEL || process.env.NVIDIA_MODEL || process.env.WEAVE_MODEL || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
 
 // A small generated image with visible text. Blank/tiny images are rejected by the
 // provider's media screening, so the probe must look like a genuine document image.

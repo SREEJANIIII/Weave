@@ -4,6 +4,7 @@ import cors from 'cors';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createApiRouter } from './routes/api.js';
+import { createPapersRouter } from './routes/papers.js';
 import { createAppliancesRouter } from './routes/appliances.js';
 
 const TYPES = {
@@ -53,6 +54,7 @@ export function createApp({ root, hub, proposals, state, port }) {
   // Allow base64 encoded photo/PDF reading and larger connection imports while keeping a small cap elsewhere.
   app.use('/api/read-document', express.json({ limit: '12mb', strict: false }));
   app.use('/api/connections', express.json({ limit: '2mb', strict: false }));
+  app.use('/api/papers', express.json({ limit: '12mb', strict: false }), createPapersRouter({ state }));
   app.use('/api', express.json({ limit: '64000b', strict: false }));
   app.use('/api/appliances', createAppliancesRouter({ hub }));
   app.use('/api', createApiRouter({ hub, proposals, state }));
