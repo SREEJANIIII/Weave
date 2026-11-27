@@ -9,7 +9,7 @@
     "dev": "nodemon",
     "offline": "WEAVE_MODE=offline node --env-file-if-exists=.env src/server.js",
     "smoke": "node scripts/smoke.js",
-    "test": "node --env-file-if-exists=.env scripts/test-size-matcher.js && node --env-file-if-exists=.env scripts/test-nvidia-planner.js && node --env-file-if-exists=.env scripts/test-persistence.js && node --env-file-if-exists=.env scripts/test-appliances.js",
+    "test": "node --env-file-if-exists=.env scripts/test-size-matcher.js && node --env-file-if-exists=.env scripts/test-nvidia-planner.js && node --env-file-if-exists=.env scripts/test-persistence.js && node --env-file-if-exists=.env scripts/test-appliances.js && node --env-file-if-exists=.env scripts/test-wardrobe-routing.js && node --env-file-if-exists=.env scripts/test-timetable.js",
     "test:appliances": "node --env-file-if-exists=.env scripts/test-appliances.js"
   },
   "engines": {

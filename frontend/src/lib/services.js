@@ -46,6 +46,20 @@ export const SERVICE_COPY = {
     changes: 'Saves appliance details and deadlines only after you confirm them.',
     helps: 'Warranty dates, service records and bill deadlines',
   },
+  wardrobe: {
+    name: 'Wardrobe',
+    icon: 'i-heart',
+    sees: 'Garments you upload and confirm for your wardrobe.',
+    changes: 'Saves or archives garments only after you choose to do so.',
+    helps: 'Saved clothes and outfit ideas',
+  },
+  timetable: {
+    name: 'Timetable',
+    icon: 'i-calendar',
+    sees: 'Your confirmed recurring classes and free periods.',
+    changes: 'Saves timetable entries only after you review and confirm them.',
+    helps: 'Classes, next periods and availability',
+  },
 };
 
 /** Colour thread for a service; matches the yarns on the landing page. */

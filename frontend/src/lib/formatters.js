@@ -1,4 +1,4 @@
-export const YARN = { calendar: 'calendar', notes: 'notes', tasks: 'tasks', money: 'money', wishlist: 'wishlist', appliances: 'appliances' };
+export const YARN = { calendar: 'calendar', notes: 'notes', tasks: 'tasks', money: 'money', wishlist: 'wishlist', appliances: 'appliances', wardrobe: 'wishlist', timetable: 'calendar' };
 
 export const APP_REGISTRY = [
   { id: 'calendar', name: 'Calendar', blurb: 'Events and free time' },
@@ -7,6 +7,8 @@ export const APP_REGISTRY = [
   { id: 'money', name: 'Money', blurb: 'Imported statement' },
   { id: 'wishlist', name: 'Wishlist & sizes', blurb: 'Saved products and size intelligence' },
   { id: 'appliances', name: 'Appliances & Bills', blurb: 'Bills, warranties and deadlines' },
+  { id: 'wardrobe', name: 'Wardrobe', blurb: 'Garments, outfits and recommendations' },
+  { id: 'timetable', name: 'Timetable', blurb: 'Recurring classes and free periods' },
 ];
 
 export const ICON = {
@@ -16,6 +18,8 @@ export const ICON = {
   money: 'i-money',
   wishlist: 'i-heart',
   appliances: 'i-plug',
+  wardrobe: 'i-heart',
+  timetable: 'i-calendar',
   email: 'i-mail',
   fitness: 'i-fitness',
   travel: 'i-plug',

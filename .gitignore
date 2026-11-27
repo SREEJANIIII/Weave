@@ -21,6 +21,7 @@ build/
 # Private appliance document originals (never committed)
 backend/uploads/
 backend/data/ocr/
+backend/data/wardrobe.json
 
 # Databases
 *.db

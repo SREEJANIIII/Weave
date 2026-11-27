@@ -210,6 +210,14 @@ export function Sidebar({
           <Icon name="i-receipt" />
           Appliances &amp; Bills
         </NavLink>
+        <NavLink to="/app/wardrobe" className={({ isActive }) => `side-item${isActive ? ' is-on' : ''}`}>
+          <Icon name="i-heart" />
+          Wardrobe
+        </NavLink>
+        <NavLink to="/app/timetable" className={({ isActive }) => `side-item${isActive ? ' is-on' : ''}`}>
+          <Icon name="i-calendar" />
+          Timetable
+        </NavLink>
       </nav>
 
       <div className="side-recents">

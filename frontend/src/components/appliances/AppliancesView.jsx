@@ -189,7 +189,7 @@ function ReviewForm({ document, appliances, onConfirm, busy }) {
   );
 }
 
-export function AppliancesView({ enabled }) {
+export function AppliancesView({ enabled, state = enabled ? 'connected' : 'off', connectionError = null }) {
   const { summary, details, loading, error, setError, load, openAppliance, upload, confirm, updateDeadline, reminderAction } = useAppliances(enabled);
   const [selectedId, setSelectedId] = useState(null);
   const [kind, setKind] = useState('bill');
@@ -233,7 +233,19 @@ export function AppliancesView({ enabled }) {
     if (message) setNotice(message);
   };
 
-  if (!enabled) {
+  if (state === 'unavailable') {
+    return (
+      <section className="ap-card">
+        <h1>Appliances &amp; Bills</h1>
+        <p className="ap-muted">
+          We can’t reach the Appliances &amp; Bills service right now. Check the Apps panel and retry the connection.
+        </p>
+        {connectionError ? <p className="ap-error">{connectionError}</p> : null}
+      </section>
+    );
+  }
+
+  if (!enabled || state === 'off') {
     return (
       <div className="ap-shell">
         <section className="ap-card"><h1>Appliances &amp; Bills</h1><p className="ap-muted">This app is switched off. Turn on “Appliances &amp; Bills” in the Apps panel to upload bills and see deadlines.</p></section>

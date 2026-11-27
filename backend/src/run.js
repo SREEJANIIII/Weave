@@ -5,6 +5,7 @@
 //   - the final answer may only cite records that were actually read.
 import { randomUUID } from 'node:crypto';
 import { isReadOnly } from './hub.js';
+import { isWardrobeQuestion } from '../lib/wardrobe-routing.js';
 
 /** Walk a tool's structured result and collect records ({ id, kind, ... }). */
 function collectRecords(value, out = [], depth = 0) {
@@ -58,6 +59,14 @@ function describe(tool, data) {
   return 'done';
 }
 
+function markWardrobeRecords(value, depth = 0, kind = 'wardrobe_item') {
+  if (!value || typeof value !== 'object' || depth > 6) return value;
+  if (Array.isArray(value)) return value.map((item) => markWardrobeRecords(item, depth + 1, kind));
+  const copy = Object.fromEntries(Object.entries(value).map(([key, child]) => [key, markWardrobeRecords(child, depth + 1, kind)]));
+  if (typeof copy.id === 'string' && (kind === 'timetable_entry' ? copy.subject && copy.day : (copy.name || copy.category || copy.imageName))) copy.kind = kind;
+  return copy;
+}
+
 export class ProposalStore {
   constructor() {
     this.items = new Map();
@@ -75,7 +84,7 @@ export class ProposalStore {
 }
 
 export class Run {
-  constructor({ hub, proposals, question, mode, model, emit }) {
+  constructor({ hub, proposals, question, mode, model, emit, ownerId = 'default' }) {
     this.id = randomUUID();
     this.hub = hub;
     this.proposals = proposals;
@@ -83,6 +92,7 @@ export class Run {
     this.mode = mode;
     this.model = model;
     this.emit = emit;
+    this.ownerId = ownerId || 'default';
     this.sources = new Map(); // source_id -> { source_id, server, app, record }
     this.steps = [];
     this.drafts = [];
@@ -103,14 +113,16 @@ export class Run {
     const step = { id: this.steps.length + 1, server, app: this.app(server), tool, args: safeArgs(server, tool, args), kind: 'read', status: 'running' };
     this.steps.push(step);
     this.#step(step);
-    const res = await this.hub.call(server, tool, args, { run: this.id });
+    const callArgs = ['wardrobe', 'timetable'].includes(server) ? { owner_id: this.ownerId, ...args } : args;
+    const res = await this.hub.call(server, tool, callArgs, { run: this.id });
     step.ms = Math.round(res.ms);
     if (res.isError) {
       Object.assign(step, { status: 'error', summary: res.text.slice(0, 200) });
       this.#step(step);
       return { ok: false, error: res.text, data: null };
     }
-    for (const record of collectRecords(res.data)) {
+    const data = server === 'wardrobe' ? markWardrobeRecords(res.data) : server === 'timetable' ? markWardrobeRecords(res.data, 0, 'timetable_entry') : res.data;
+    for (const record of collectRecords(data)) {
       const source_id = `${server}:${record.id}`;
       const seen = this.sources.get(source_id);
       // A record can come back twice (a list summary, then the full item): keep the richest copy.
@@ -118,7 +130,7 @@ export class Run {
     }
     Object.assign(step, { status: 'done', summary: describe(tool, res.data) });
     this.#step(step);
-    return { ok: true, data: withSourceIds(server, res.data), raw: res.data };
+    return { ok: true, data: withSourceIds(server, data), raw: data };
   }
 
   /** Draft a change. Nothing is executed until the user approves it. */
@@ -133,7 +145,7 @@ export class Run {
       app: this.app(server),
       tool,
       toolTitle: def.title ?? tool,
-      args,
+      args: ['wardrobe', 'timetable'].includes(server) ? { owner_id: this.ownerId, ...args } : args,
       why,
       sourceIds: sourceIds.filter((s) => this.sources.has(s)),
       status: 'pending',
@@ -152,9 +164,21 @@ export class Run {
   finish(answer) {
     const list = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
     const valid = (ids) => [...new Set(list(ids).filter((id) => this.sources.has(id)))];
+    const wardrobeRequest = isWardrobeQuestion(this.question);
+    const wardrobeIds = new Set([...this.sources.values()].filter((source) => source.server === 'wardrobe').map((source) => source.record.id));
+    const wardrobeRead = this.steps.some((step) => step.server === 'wardrobe' && step.kind === 'read' && step.status === 'done');
     const sections = list(answer.sections)
       .map((s) => ({ title: s.title, items: list(s.items).map((it) => ({ text: it.text, detail: it.detail ?? '', sourceIds: valid(it.source_ids ?? it.sourceIds) })) }))
       .filter((s) => s.items.length);
+
+    if (wardrobeRequest && !wardrobeRead) {
+      sections.length = 0;
+      answer = { ...answer, headline: 'I could not safely read your Wardrobe inventory.', caveats: [...list(answer.caveats), 'Wishlist products are never treated as owned clothing.'] };
+    } else if (wardrobeRequest) {
+      for (const section of sections) section.items = section.items.filter((item) => item.sourceIds.length && item.sourceIds.every((id) => id.startsWith('wardrobe:') && wardrobeIds.has(id.slice('wardrobe:'.length))));
+      sections.splice(0, sections.length, ...sections.filter((section) => section.items.length));
+      answer = { ...answer, caveats: [...list(answer.caveats), 'Recommendations use only garments retrieved from Wardrobe.'] };
+    }
 
     // Number sources in the order the answer first cites them, then the drafts' sources.
     const order = [];

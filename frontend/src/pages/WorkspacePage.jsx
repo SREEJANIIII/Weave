@@ -12,6 +12,8 @@ import { Toast } from '../components/dashboard/Toast';
 import { WishlistView } from '../components/wishlist/WishlistView';
 import { SizeProfileView } from '../components/profile/SizeProfileView';
 import { AppliancesView } from '../components/appliances/AppliancesView';
+import { WardrobeView } from '../components/wardrobe/WardrobeView';
+import { TimetableView } from '../components/timetable/TimetableView';
 import { api } from '../lib/api';
 import { joinNames } from '../lib/services';
 import { STARTERS } from '../lib/followUps';
@@ -71,11 +73,11 @@ export function WorkspacePage({ routeView = null }) {
   const navigate = useNavigate();
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const PAGES = { '/app/wishlist': 'wishlist', '/app/size-profile': 'size-profile', '/app/appliances': 'appliances', '/app/saved': 'saved', '/app/connections': 'connections' };
+  const PAGES = { '/app/wishlist': 'wishlist', '/app/size-profile': 'size-profile', '/app/appliances': 'appliances', '/app/wardrobe': 'wardrobe', '/app/timetable': 'timetable', '/app/saved': 'saved', '/app/connections': 'connections' };
   const view = routeView ?? (Object.entries(PAGES).find(([path]) => location.pathname.startsWith(path))?.[1] ?? 'home');
 
   usePageMeta({
-    page: ['wishlist', 'size-profile', 'appliances'].includes(view) ? 'app' : 'dashboard',
+    page: ['wishlist', 'size-profile', 'appliances', 'wardrobe', 'timetable'].includes(view) ? 'app' : 'dashboard',
     title: { wishlist: 'Weave — Wishlist', 'size-profile': 'Weave — Sizes', appliances: 'Weave — Appliances & Bills', saved: 'Weave — Saved', connections: 'Weave — Connections' }[view] ?? 'Weave',
     description: 'Ask Weave about your plans, purchases and papers. It answers from what you’ve saved and connected, and asks before changing anything.',
   });
@@ -235,6 +237,7 @@ export function WorkspacePage({ routeView = null }) {
   /* ---------- Asking ---------- */
 
   const wishlistState = conn.services.find((s) => s.id === 'wishlist')?.state;
+  const applianceService = conn.services.find((s) => s.id === 'appliances');
 
   const ask = useCallback(
     async (raw) => {
@@ -493,7 +496,7 @@ export function WorkspacePage({ routeView = null }) {
     [store.wishlist, store.occasions, store.reminderPrefs],
   );
   const dockComposer = view === 'home' && (hasThread || narrow);
-  const pageTitle = view === 'home' ? chats.active?.title ?? '' : view === 'appliances' ? 'Appliances & Bills' : '';
+  const pageTitle = view === 'home' ? chats.active?.title ?? '' : view === 'appliances' ? 'Appliances & Bills' : view === 'wardrobe' ? 'Wardrobe' : view === 'timetable' ? 'Timetable' : '';
 
   const composer = (docked) => (
     <Composer
@@ -575,7 +578,15 @@ export function WorkspacePage({ routeView = null }) {
               activity={activity}
             />
           ) : view === 'appliances' ? (
-            <AppliancesView enabled={conn.services.find((service) => service.id === 'appliances')?.state === 'connected'} />
+            <AppliancesView
+              enabled={applianceService?.state === 'connected'}
+              state={applianceService?.state ?? 'unavailable'}
+              connectionError={applianceService?.error}
+            />
+          ) : view === 'wardrobe' ? (
+            <WardrobeView enabled={conn.services.find((service) => service.id === 'wardrobe')?.state === 'connected'} />
+          ) : view === 'timetable' ? (
+            <TimetableView enabled={conn.services.find((service) => service.id === 'timetable')?.state === 'connected'} />
           ) : view === 'wishlist' ? (
             <div className="wl-shell">
               <WishlistView

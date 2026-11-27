@@ -3,6 +3,8 @@
 import OpenAI from 'openai';
 import { isReadOnly } from './hub.js';
 import { now, isoDate, fmtLongDate, pad } from '../lib/dates.js';
+import { isWardrobeQuestion } from '../lib/wardrobe-routing.js';
+import { isTimetableQuestion } from '../lib/timetable-routing.js';
 
 export const BASE_URL = 'https://integrate.api.nvidia.com/v1';
 export const MODEL = process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b';
@@ -31,6 +33,8 @@ How to work:
 - For saved-product and occasion questions, use Wishlist & sizes plus Calendar when connected. Match event occasion tags/titles to wishlist occasion tags and use requested 30/14/7-day windows; never invent festival dates.
 - For size questions, call match_product_size or get_brand_size_chart. Results are deterministic synthetic-data recommendations, never fit guarantees. Do not call get_size_profile unless explicitly asked; measurements are sensitive.
 - For appliance questions use Appliances & Bills: search_appliances, get_appliance, get_appliance_documents, get_upcoming_deadlines and list_appliance_reminders. Answer with dates actually documented, never invent one. "Soon" means the next 30 days unless the user says otherwise. Write tools such as update_appliance_deadline, create_appliance_reminder, update_appliance_reminder and update_appliance only draft changes for approval; dismissed/completed reminders stay that way.
+- For wardrobe questions use Wardrobe tools to browse garments and recommend outfits from saved active items. Do not claim image understanding beyond the reviewed metadata provided by the user.
+- For timetable questions use Timetable retrieval tools for recurring weekday classes; use Calendar only for dated context. Never use Wishlist or invent dates for recurring entries. Use subject/day/free-slot tools as appropriate.
 - Every record returned by a tool has a source_id. Cite only source_ids from records actually read.
 - Writes never execute from a tool call: they create drafts for approval. Check for duplicates first and never claim a draft is done.
 - If an app is unavailable or a tool fails, say what you could not check instead of guessing.
@@ -46,7 +50,10 @@ function schemaFor(tool) {
 
 function buildTools(run) {
   const byName = new Map();
-  const tools = run.hub.availableTools().map(({ server, app, tool }) => {
+  const wardrobeOnly = isWardrobeQuestion(run.question);
+  const timetableOnly = isTimetableQuestion(run.question);
+  const available = run.hub.availableTools().filter(({ server, tool }) => (!wardrobeOnly || server === 'wardrobe' || (server === 'calendar' && isReadOnly(tool))) && (!timetableOnly || server === 'timetable' || (server === 'calendar' && isReadOnly(tool))));
+  const tools = available.map(({ server, app, tool }) => {
     const name = `${server}__${tool.name}`;
     const readOnly = isReadOnly(tool);
     const parameters = schemaFor(tool);
@@ -81,7 +88,9 @@ function parseAnswer(text) {
 }
 
 export async function runNvidia(run, { client = createNvidiaClient() } = {}) {
-  const apps = [...new Set(run.hub.availableTools().map((tool) => tool.app))];
+  const wardrobeOnly = isWardrobeQuestion(run.question);
+  const timetableOnly = isTimetableQuestion(run.question);
+  const apps = [...new Set(run.hub.availableTools().filter(({ server, tool }) => (!wardrobeOnly || server === 'wardrobe' || (server === 'calendar' && isReadOnly(tool))) && (!timetableOnly || server === 'timetable' || (server === 'calendar' && isReadOnly(tool)))).map((tool) => tool.app))];
   const { tools, byName } = buildTools(run);
   const messages = [{ role: 'system', content: systemPrompt(apps) }, { role: 'user', content: run.question }];
   let lastMessage = null;
@@ -100,6 +109,10 @@ export async function runNvidia(run, { client = createNvidiaClient() } = {}) {
       try { input = JSON.parse(call.function?.arguments || '{}'); } catch { input = null; }
       if (name === 'present_answer') { run.draftAnswer = input ?? {}; presented = true; messages.push({ role: 'tool', tool_call_id: call.id, content: 'Answer captured.' }); continue; }
       const entry = byName.get(name);
+      if (entry && ((isWardrobeQuestion(run.question) && entry.server === 'wishlist') || (isTimetableQuestion(run.question) && ['wishlist', 'wardrobe'].includes(entry.server)))) {
+        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: 'Wishlist products are not owned wardrobe inventory. Use Wardrobe tools instead.' }) });
+        continue;
+      }
       const result = !input ? JSON.stringify({ error: 'Malformed JSON tool arguments.' }) : entry ? await executeTool(run, entry, input) : JSON.stringify({ error: `Unknown tool ${name}.` });
       messages.push({ role: 'tool', tool_call_id: call.id, content: result });
     }

@@ -2,6 +2,8 @@
 // calls as the NVIDIA planner and follows the same rules (cite what you read, draft changes, never
 // run them), but the reasoning is hand-written, so it only understands these two questions.
 import { now, isoDate, lastWeek, fmtRange, fmtTime, fmtDay, fmtMoney, fmtRelative, shortWeekday, toMinutes, fromMinutes, addDays } from '../lib/dates.js';
+import { isWardrobeQuestion, validWardrobeItems } from '../lib/wardrobe-routing.js';
+import { isTimetableQuestion } from '../lib/timetable-routing.js';
 
 export const DEMO_QUESTIONS = [
   'What should I follow up on today, and when can I fit in a workout?',
@@ -52,6 +54,8 @@ export async function runOffline(run) {
   const q = run.question.toLowerCase();
   const appliance = /warrant|amc|\bemi\b|appliance|servic|return|replace|washing machine|refrigerator|\bac\b/.test(q);
   if (appliance) return run.finish(await appliances(run));
+  if (isTimetableQuestion(run.question)) return run.finish(await timetable(run));
+  if (isWardrobeQuestion(run.question)) return run.finish(await wardrobeAndOutfits(run));
   const wishlist = /wishlist|saved|diwali|wedding|birthday|occasion|size|outfit|product/.test(q);
   if (wishlist) return run.finish(await wishlistAndOccasions(run));
   const daily = /follow[\s-]?up|to-?dos?|action items?|workout|exercise|\brun\b|gym|fit in/.test(q);
@@ -63,6 +67,50 @@ export async function runOffline(run) {
     sections: [{ title: 'Try one of these', items: DEMO_QUESTIONS.map((text) => ({ text, detail: '', source_ids: [] })) }],
     caveats: ['Switch the planner to NVIDIA (top right) to ask anything across your connected apps.'],
   });
+}
+
+async function timetable(run) {
+  const q = run.question.toLowerCase();
+  const rawAfter = q.match(/after\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  const afterTime = rawAfter ? `${String((Number(rawAfter[1]) + (rawAfter[3]?.toLowerCase() === 'pm' && Number(rawAfter[1]) < 12 ? 12 : 0)) % 24).padStart(2, '0')}:${rawAfter[2] ?? '00'}` : undefined;
+  if (!run.hub.isAvailable('timetable')) return { headline: "Your Timetable is switched off, so I can't check classes.", sections: [], caveats: ['Upload and confirm a timetable first.'] };
+  const subject = q.match(/\b(dsa|dbms|java|python|math(?:s)?|physics|chemistry)\b/i)?.[1];
+  const day = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].find((name) => q.includes(name));
+  let result;
+  if (/free/.test(q)) result = await run.read('timetable', 'get_free_slots', { day: day ? day[0].toUpperCase() + day.slice(1) : 'Tuesday', afterTime });
+  else if (subject) result = await run.read('timetable', 'get_next_class_by_subject', { subject });
+  else if (/last class/.test(q) && day) result = await run.read('timetable', 'get_classes_for_day', { day: day[0].toUpperCase() + day.slice(1) });
+  else if (day) result = await run.read('timetable', 'get_classes_for_day', { day: day[0].toUpperCase() + day.slice(1) });
+  else result = await run.read('timetable', 'get_next_class', {});
+  if (!result.ok) return { headline: "I couldn't read your confirmed timetable.", sections: [], caveats: [result.error] };
+  const data = result.raw ?? {};
+  if (data.slots) return { headline: `You have ${data.slots.length} free period${data.slots.length === 1 ? '' : 's'} on ${data.day} after the requested time.`, sections: [{ title: 'Free periods', items: data.slots.map((slot) => ({ text: `${slot.startTime}–${slot.endTime}`, detail: 'No confirmed class overlaps this interval.', source_ids: [] })) }], caveats: ['Timetable entries repeat weekly; no calendar date was invented.'] };
+  const list = data.entries ?? (data.entry ? [data.entry] : []);
+  if (!list.length) return { headline: 'No confirmed timetable entry matched that question.', sections: [], caveats: ['Upload or confirm the timetable, or check the subject/day spelling.'] };
+  const afterSubject = q.match(/after\s+([a-z0-9]+)/i)?.[1];
+  const afterIndex = afterSubject ? list.findIndex((item) => item.subject.toLowerCase().includes(afterSubject.toLowerCase())) : -1;
+  const selected = /last class/.test(q) ? [list[list.length - 1]] : afterIndex >= 0 ? list.slice(afterIndex + 1, afterIndex + 2) : list;
+  return { headline: selected.length === 1 ? `${selected[0].subject} is on ${selected[0].day} from ${selected[0].startTime} to ${selected[0].endTime}.` : `${selected.length} classes are scheduled on ${selected[0].day}.`, sections: [{ title: 'Confirmed timetable', items: selected.map((item) => ({ text: `${item.subject}: ${item.startTime}–${item.endTime}`, detail: [item.classType, item.location].filter(Boolean).join(' · '), source_ids: [`timetable:${item.id}`] })) }], caveats: ['These are recurring weekday classes; no calendar date was invented.'] };
+}
+
+async function wardrobeAndOutfits(run) {
+  const has = (id) => run.hub.isAvailable(id);
+  if (!has('wardrobe')) return { headline: "Wardrobe is switched off, so I can't use your owned garments.", sections: [], caveats: ['Turn on Wardrobe and upload clothing before asking for an outfit.'] };
+  const inventory = await run.read('wardrobe', 'list_wardrobe_items', { status: 'active' });
+  if (!inventory.ok) return { headline: "I couldn't read your Wardrobe inventory.", sections: [], caveats: [inventory.error] };
+  const owned = inventory.raw?.items ?? [];
+  if (!owned.length) return { headline: 'Your Wardrobe is empty.', sections: [], caveats: ['Upload and save clothing in Wardrobe before asking for an outfit. Wishlist products are not treated as owned clothing.'] };
+  const allowed = new Set(owned.map((item) => item.id));
+  const recommendation = await run.read('wardrobe', 'recommend_outfits', { occasion: run.question.match(/college|work|dinner|wedding|party|casual/i)?.[0] ?? '', limit: 3 });
+  const outfits = (recommendation.raw?.outfits ?? []).filter((outfit) => validWardrobeItems(outfit.items, allowed).length === (outfit.items ?? []).length);
+  let events = [];
+  if (has('calendar') && /tomorrow|college|class|schedule|dinner|meeting|9\s*[-–]\s*4/i.test(run.question)) {
+    const start = isoDate(addDays(now(), /tomorrow/i.test(run.question) ? 1 : 0));
+    const result = await run.read('calendar', 'list_events', { date: start });
+    events = result.raw?.events ?? [];
+  }
+  const sections = outfits.map((outfit) => ({ title: 'Wardrobe outfit', items: [{ text: outfit.items.map((item) => item.name).join(' + '), detail: `${outfit.explanation}${events.length ? ` Calendar context: ${events.map((event) => event.title).join(', ')}.` : ''}`, source_ids: outfit.items.map((item) => `wardrobe:${item.id}`).concat(events.map((event) => `calendar:${event.id}`)) }] }));
+  return { headline: sections.length ? `I found ${sections.length} outfit option${sections.length === 1 ? '' : 's'} using your Wardrobe.` : 'I could not make a verified outfit from your Wardrobe.', sections, caveats: ['Only active garments retrieved from Wardrobe are eligible.'] };
 }
 
 async function wishlistAndOccasions(run) {

@@ -127,7 +127,8 @@ export function createApiRouter({ hub, proposals, state }) {
       if (!res.writableEnded && !res.destroyed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
     const mode = state.mode;
-    const run = new Run({ hub, proposals, question: q, mode, model: mode === 'nvidia' ? MODEL : null, emit: send });
+    const ownerId = String(req.get('x-weave-user') || 'default').trim().slice(0, 128) || 'default';
+    const run = new Run({ hub, proposals, question: q, mode, model: mode === 'nvidia' ? MODEL : null, ownerId, emit: send });
     send('run', { id: run.id, mode, model: run.model, question: q });
     try {
       if (mode === 'nvidia') await runNvidia(run);
@@ -179,6 +180,7 @@ export function createApiRouter({ hub, proposals, state }) {
     res.status(503).json({ error: `${serverId} app is switched off or unavailable.` });
     return true;
   };
+  const wardrobeOwner = (req) => String(req.get('x-weave-user') || 'default').trim().slice(0, 128) || 'default';
 
   router.get('/wishlist', async (req, res) => {
     if (appGuard(res, 'wishlist')) return;
@@ -205,6 +207,41 @@ export function createApiRouter({ hub, proposals, state }) {
   router.delete('/wishlist/:id', async (req, res) => {
     if (appGuard(res, 'wishlist')) return;
     const r = await hub.call('wishlist', 'delete_wishlist_item', { id: req.params.id }, { summary: 'deleted wishlist item' });
+    if (r.isError) return res.status(400).json({ error: r.text });
+    return res.json(r.data);
+  });
+
+  router.get('/wardrobe', async (req, res) => {
+    if (appGuard(res, 'wardrobe')) return;
+    const r = await hub.call('wardrobe', 'list_wardrobe_items', { owner_id: wardrobeOwner(req), category: req.query.category, occasion: req.query.occasion, status: req.query.status ?? 'active' }, { summary: 'loaded wardrobe' });
+    if (r.isError) return res.status(400).json({ error: r.text });
+    return res.json(r.data);
+  });
+
+  router.post('/wardrobe', async (req, res) => {
+    if (appGuard(res, 'wardrobe')) return;
+    const r = await hub.call('wardrobe', 'save_wardrobe_item', { owner_id: wardrobeOwner(req), ...(req.body ?? {}) }, { summary: 'saved wardrobe item' });
+    if (r.isError) return res.status(400).json({ error: r.text });
+    return res.status(201).json(r.data);
+  });
+
+  router.patch('/wardrobe/:id', async (req, res) => {
+    if (appGuard(res, 'wardrobe')) return;
+    const r = await hub.call('wardrobe', 'update_wardrobe_item', { owner_id: wardrobeOwner(req), id: req.params.id, ...(req.body ?? {}) }, { summary: 'updated wardrobe item' });
+    if (r.isError) return res.status(400).json({ error: r.text });
+    return res.json(r.data);
+  });
+
+  router.delete('/wardrobe/:id', async (req, res) => {
+    if (appGuard(res, 'wardrobe')) return;
+    const r = await hub.call('wardrobe', 'delete_wardrobe_item', { owner_id: wardrobeOwner(req), id: req.params.id }, { summary: 'archived wardrobe item' });
+    if (r.isError) return res.status(400).json({ error: r.text });
+    return res.json(r.data);
+  });
+
+  router.post('/wardrobe/recommend', async (req, res) => {
+    if (appGuard(res, 'wardrobe')) return;
+    const r = await hub.call('wardrobe', 'recommend_outfits', { owner_id: wardrobeOwner(req), ...(req.body ?? {}) }, { summary: 'recommended wardrobe outfits' });
     if (r.isError) return res.status(400).json({ error: r.text });
     return res.json(r.data);
   });

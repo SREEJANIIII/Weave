@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createApiRouter } from './routes/api.js';
 import { createAppliancesRouter } from './routes/appliances.js';
+import { createTimetableRouter } from './routes/timetable.js';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -54,6 +55,7 @@ export function createApp({ root, hub, proposals, state, port }) {
   app.use('/api/connections', express.json({ limit: '2mb', strict: false }));
   app.use('/api', express.json({ limit: '64000b', strict: false }));
   app.use('/api/appliances', createAppliancesRouter({ hub }));
+  app.use('/api/timetable', createTimetableRouter({ hub }));
   app.use('/api', createApiRouter({ hub, proposals, state }));
 
   // Built React app (or the Vite source tree before a build), with the original cache rules.

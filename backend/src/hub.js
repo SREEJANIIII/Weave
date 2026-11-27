@@ -13,6 +13,8 @@ export const SERVER_DEFS = [
   { id: 'money', name: 'Money', script: 'mcp-servers/money.js', blurb: 'Imported statement', requires: ['MONGODB_URI'] },
   { id: 'wishlist', name: 'Wishlist & sizes', script: 'mcp-servers/wishlist.js', blurb: 'Saved products and size intelligence', requires: ['MONGODB_URI'] },
   { id: 'appliances', name: 'Appliances & Bills', script: 'mcp-servers/appliances.js', blurb: 'Bills, warranties and deadlines', requires: ['MONGODB_URI'] },
+  { id: 'wardrobe', name: 'Wardrobe', script: 'mcp-servers/wardrobe.js', blurb: 'Garments, outfits and recommendations', requires: [] },
+  { id: 'timetable', name: 'Timetable', script: 'mcp-servers/timetable.js', blurb: 'Recurring classes and free periods', requires: ['MONGODB_URI'] },
 ];
 
 // Shown in the UI as planned. Nothing here is connected.

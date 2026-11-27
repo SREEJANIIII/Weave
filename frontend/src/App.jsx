@@ -33,6 +33,8 @@ export function App() {
         <Route path="/developers.html" element={<DevelopersPage />} />
         <Route path="/app" element={<WorkspacePage />} />
         <Route path="/app/appliances/*" element={<WorkspacePage routeView="appliances" />} />
+        <Route path="/app/wardrobe/*" element={<WorkspacePage routeView="wardrobe" />} />
+        <Route path="/app/timetable/*" element={<WorkspacePage routeView="timetable" />} />
         <Route path="/app/wishlist/*" element={<WorkspacePage routeView="wishlist" />} />
         <Route path="/app/size-profile/*" element={<WorkspacePage routeView="size-profile" />} />
         <Route path="/app/*" element={<WorkspacePage />} />
