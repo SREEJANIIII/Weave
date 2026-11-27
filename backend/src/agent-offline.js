@@ -78,6 +78,7 @@ async function timetable(run) {
   const day = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].find((name) => q.includes(name));
   let result;
   if (/free/.test(q)) result = await run.read('timetable', 'get_free_slots', { day: day ? day[0].toUpperCase() + day.slice(1) : 'Tuesday', afterTime });
+  else if (/after\s+\w+/i.test(q) && day) result = await run.read('timetable', 'get_classes_for_day', { day: day[0].toUpperCase() + day.slice(1) });
   else if (subject) result = await run.read('timetable', 'get_next_class_by_subject', { subject });
   else if (/last class/.test(q) && day) result = await run.read('timetable', 'get_classes_for_day', { day: day[0].toUpperCase() + day.slice(1) });
   else if (day) result = await run.read('timetable', 'get_classes_for_day', { day: day[0].toUpperCase() + day.slice(1) });

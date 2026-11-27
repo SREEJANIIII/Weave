@@ -12,8 +12,8 @@ assert.ok(!entries.some((entry) => entry.subject === 'Break' || entry.subject ==
 assert.equal(extractTimetableEntries('A document without days or class times').length, 0);
 
 const schedule = [
-  { id: 'm-dsa', kind: 'timetable_entry', day: 'Monday', startTime: '09:00', endTime: '10:00', subject: 'DSA' },
-  { id: 'm-java', kind: 'timetable_entry', day: 'Monday', startTime: '10:00', endTime: '11:00', subject: 'Java' },
+  { id: 'm-java', kind: 'timetable_entry', day: 'Monday', startTime: '09:00', endTime: '10:00', subject: 'Java' },
+  { id: 'm-dsa', kind: 'timetable_entry', day: 'Monday', startTime: '10:00', endTime: '11:00', subject: 'DSA' },
   { id: 't-dbms', kind: 'timetable_entry', day: 'Tuesday', startTime: '11:00', endTime: '12:00', subject: 'DBMS' },
   { id: 'w-java', kind: 'timetable_entry', day: 'Wednesday', startTime: '09:00', endTime: '10:00', subject: 'Java' },
   { id: 'w-dbms', kind: 'timetable_entry', day: 'Wednesday', startTime: '10:00', endTime: '12:00', subject: 'DBMS' },
